@@ -3,14 +3,15 @@ name:
 version:
   0.1.0
 synopsis:
-  A library for implementing client-server remote services
+  A minimalistic library for implementing client-server remote services
 description:
-  An API abstracting over the typical tasks of client-server communication.
+  Provides an API abstracting over the typical tasks of client-server communication.
   It automates the authentication process and keeping of the connection alive.
   The user can implement protocols of any form based on messaging.
 
   Useful for writing all kinds of services. 
-  E.g., the "graph-db" networking interface is based on this library.
+  E.g., the <http://hackage.haskell.org/package/graph-db graph-db> 
+  networking interface is based on this library.
 category:
   Network, Service
 homepage:
