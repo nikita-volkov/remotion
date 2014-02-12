@@ -14,7 +14,7 @@ import qualified Pipes.Prelude as PipesPrelude
 newtype Session i o s r = 
   Session (ReaderT (Env i o s) (EitherT Text IO) r)
   deriving (Functor, Applicative, Monad, MonadIO, MonadReader (Env i o s), MonadError Text)
-type Env i o s = (Settings i o s, State s)
+type Env i o s = (Settings i o s, SessionState s)
 type Settings i o s = (Network.Socket.Socket, Timeout, Authenticate, ProcessMessage i o s)
 
 -- |
@@ -36,19 +36,26 @@ type Hash = ByteString
 
 -- | 
 -- A function which processes messages from client and produces a response,
--- while managing a user-defined session state for each client.
--- Since we're in `IO` to have a mutable state you can use mutable data structures and `IORef`s.
+-- while managing a user-defined session state per each client.
 -- 
 -- This function essentially is what defines what your server actually does.
-type ProcessMessage i o s = s -> i -> IO o
+type ProcessMessage i o s = State s -> i -> IO o
 
-type State s = (Authenticated, s)
+-- |
+-- A mutable state associated with particular client's connection.
+-- Since we're in `IO` anyway, we use a mutable state with `IORef` wrapper.
+-- You're free to extend it with whatever data structure you want.
+type State s = IORef (Maybe s)
+
+type SessionState s = (Authenticated, State s)
 
 type Authenticated = IORef Bool
 
 
-run :: Session i o s r -> Env i o s -> EitherT Text IO r
-run (Session t) = runReaderT t
+run :: Session i o s r -> Settings i o s -> EitherT Text IO r
+run (Session t) settings = do
+  state <- liftIO $ (,) <$> newIORef False <*> newIORef Nothing
+  runReaderT t (settings, state)
 
 listen :: (Serializable IO i) => Session i o s (Protocol.Request i)
 listen = Session $ do
@@ -64,17 +71,31 @@ reply a = Session $ do
 
 interact :: (Serializable IO i, Serializable IO o) => Session i o s ()
 interact = do
-  ((_, _, auth, processMessage), (authenticated, s)) <- ask
+  ((_, _, auth, processMessage), (authenticated, state)) <- ask
   listen >>= \case
     Protocol.Request_StartSession hash -> do
       liftIO (auth hash) >>= \case
         True -> do
           reply $ Protocol.Response_StartSession True
+          liftIO $ writeIORef authenticated True
           interact
         False -> do
           reply $ Protocol.Response_StartSession False
     Protocol.Request_CloseSession -> do
       reply $ Protocol.Response_CloseSession
-    _ -> $notImplemented
-
+    Protocol.Request_Session spec -> do
+      liftIO (readIORef authenticated) >>= \case
+        True -> case spec of
+          Protocol.Request_Session_Spec_Message a -> do
+            replyMessage <- liftIO $ processMessage state a
+            reply $ Protocol.Response_Session $ Right $ 
+                    Protocol.Response_Session_Spec_Message replyMessage
+            interact
+          Protocol.Request_Session_Spec_CheckIn -> do
+            reply $ Protocol.Response_Session $ Right $ 
+                    Protocol.Response_Session_Spec_CheckIn
+            interact
+        False -> do
+          reply $ Protocol.Response_Session $ Left $ 
+                  Protocol.Response_Session_Failure_Unauthenticated
 

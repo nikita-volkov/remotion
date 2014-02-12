@@ -29,9 +29,8 @@ data Response a =
 instance (Serializable m a) => Serializable m (Response a)
 
 data Response_Session_Failure a =
-  -- | The client has not yet sent a StartSession request.
-  Response_Session_Failure_NotStartedSession |
-  Response_Session_Failure_MismatchingMessage |
+  -- | Not authenticated or the client has not even yet sent a StartSession request.
+  Response_Session_Failure_Unauthenticated |
   -- | The server is busy and suggests to retry the same request after the specified 
   -- amount of milliseconds.
   Response_Session_Failure_Busy Int |
@@ -43,7 +42,7 @@ instance (Serializable m a) => Serializable m (Response_Session_Failure a)
 
 data Response_Session_Spec a =
   Response_Session_Spec_Message a |
-  Response_Session_CheckIn
+  Response_Session_Spec_CheckIn
   deriving (Generic)
 
 instance (Serializable m a) => Serializable m (Response_Session_Spec a)

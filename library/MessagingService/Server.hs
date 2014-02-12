@@ -1,13 +1,23 @@
-module MessagingService.Server where
+module MessagingService.Server
+  (
+    listen,
+    Settings,
+    ListeningMode,
+    Port,
+    Session.Authenticate,
+    Session.Hash,
+    Session.Timeout,
+    Log,
+    Session.ProcessMessage,
+    Session.State,
+  )
+  where
 
-import MessagingService.Util.Prelude
-import qualified MessagingService.Protocol as Protocol
+import MessagingService.Util.Prelude hiding (listen)
 import qualified MessagingService.Server.Session as Session
 import qualified MessagingService.Util.FileSystem as FS
 import qualified Network
 import qualified Network.Socket
-import qualified Pipes.Network.TCP.Safe as PipesNetwork
-import qualified Pipes.Prelude as PipesPrelude
 
 
 -- | 
@@ -15,9 +25,10 @@ import qualified Pipes.Prelude as PipesPrelude
 -- 
 -- This is a blocking operation.
 -- If all your executable does is just run the server, 
--- then all you need is just to run the `CIO` monad,
--- setting the maximum number of concurrent threads, 
--- which controls the amount of maintained connections.
+-- then all you need is run the `CIO` monad,
+-- while setting the maximum number of concurrent threads.
+-- The amount of concurrent connections your server handles 
+-- directly depends on this parameter.
 -- All the exceeding connections will be put on a wait list.
 -- In the following case we set it to 100:
 -- 
@@ -74,34 +85,26 @@ import qualified Pipes.Prelude as PipesPrelude
 listen :: (Serializable IO i, Serializable IO o) => Settings i o s -> CIO ()
 listen (listeningMode, timeout, log, processMessage) = do
 
-  listeningSocket <- do
-    let portID = case listeningMode of
-          ListeningMode_Host port _ -> Network.PortNumber $ fromIntegral port
-          ListeningMode_Socket path -> Network.UnixSocket $ FS.encodeString path
-    liftIO $ Network.listenOn portID
+  let (portID, auth) = case listeningMode of
+        ListeningMode_Host port auth -> (Network.PortNumber $ fromIntegral port, auth)
+        ListeningMode_Socket path -> (Network.UnixSocket $ FS.encodeString path, const $ pure True)
+
+  listeningSocket <- liftIO $ Network.listenOn portID
 
   forever $ do
     liftIO $ log "Listening"
     (connectionSocket, _) <- liftIO $ Network.Socket.accept listeningSocket
     liftIO $ log "Client connected"
-    forkCIO $ runSession connectionSocket
+    sessionFork <- forkCIO $ do
+      let settings = (connectionSocket, timeout, auth, processMessage)
+      ei <- liftIO $ runEitherT $ Session.run Session.interact settings
+      either (liftIO . log . ("Session error: " <>)) (const $ return ()) ei
+    -- Register a waiter of the session thread to finish somehow to release the socket:
+    forkCIO $ do
+      waitCIO' sessionFork
+      liftIO $ Network.sClose connectionSocket
 
-  return ()
-  where
-    -- If things get trickier, we should make it a dedicated monad.
-    runSession socket = do
-      $notImplemented
-      where
-        listen :: forall a. (Serializable IO a) => IO (Either Text a)
-        listen = 
-          fmap join $ (fmap . fmap) (maybe (Left "Empty request") Right) $
-          runEitherT $ PipesPrelude.head $ 
-            PipesNetwork.fromSocketTimeout timeout socket 4096 >-> 
-            deserializingPipe
-        reply :: forall a. (Serializable IO a) => a -> IO ()
-        reply a = runEffect $ 
-          serializingProducer a >-> 
-          PipesNetwork.toSocketTimeout timeout socket
+
 
 -- | Settings of how to run the server.
 type Settings i o s = (ListeningMode, Session.Timeout, Log, Session.ProcessMessage i o s)
