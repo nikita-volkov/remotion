@@ -104,13 +104,13 @@ listen (listeningMode, timeout, log, processMessage) = do
           PipesNetwork.toSocketTimeout timeout socket
 
 -- | Settings of how to run the server.
-type Settings i o s = (ListeningMode, Timeout, Log, ProcessMessage i o s)
+type Settings i o s = (ListeningMode, Session.Timeout, Log, Session.ProcessMessage i o s)
 
 -- | Defines how to listen for connections.
 data ListeningMode =
   -- | 
   -- Listen on a port with an authentication function.
-  ListeningMode_Host Port Authenticate |
+  ListeningMode_Host Port Session.Authenticate |
   -- | 
   -- Listen on a socket file.
   -- Since sockets are local no authentication is needed.
@@ -120,23 +120,6 @@ data ListeningMode =
 -- | A port to run the server on.
 type Port = Int
 
--- | 
--- A function, which checks the hashed authentication data.
--- If you want to provide access to anybody, use @(\_ -> return True)@.
--- 
--- An argument value of @Nothing@ means an attempt of anonymous authentication.
-type Authenticate = Maybe Hash -> IO Bool
-
--- |
--- Either a plain ASCII password or an encoding of some data, 
--- e.g. an MD5 hash of a login-password pair or just a password.
-type Hash = ByteString
-
--- |
--- A session timeout in ms. Period of keepalive signaling depends on that parameter.
--- If you don't want excessive requests, just make it a couple of minutes.
-type Timeout = Int
-
 -- |
 -- A logging function.
 -- If you want no logging, use @('Control.Monad.void' . return)@, 
@@ -145,12 +128,4 @@ type Timeout = Int
 -- If you want to somehow reformat the output, you're welcome: 
 -- @(Data.Text.IO.'Data.Text.IO.putStrLn' . (\"MessagingService.Server: \" `<>`))@.
 type Log = Text -> IO ()
-
--- | 
--- A function which processes messages from client and produces a response,
--- while managing a user-defined session state for each client.
--- Since we're in `IO` to have a mutable state you can use mutable data structures and `IORef`s.
--- 
--- This function essentially is what defines what your server actually does.
-type ProcessMessage i o s = s -> i -> IO o
 
