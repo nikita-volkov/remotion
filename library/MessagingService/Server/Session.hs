@@ -12,7 +12,7 @@ import qualified Pipes.Prelude as PipesPrelude
 -- | 
 -- A user session on server.
 newtype Session u a r = 
-  Session (EitherT Text (ReaderT (Env u) IO) r)
+  Session (ReaderT (Env u) (EitherT Text IO) r)
   deriving (Functor, Applicative, Monad, MonadIO, MonadReader (Env u), MonadError Text)
 type Env u = (Settings, State u)
 type Settings = (Network.Socket.Socket, Timeout, Authenticate)
@@ -22,21 +22,22 @@ type Hash = ByteString
 type State u = (Authenticated, u)
 type Authenticated = IORef Bool
 
-run :: Session u a r -> Env u -> IO (Either Text r)
-run (Session t) env = runReaderT (runEitherT t) env
+run :: Session u a r -> Env u -> EitherT Text IO r
+run (Session t) = runReaderT t
 
-listen :: (Serializable (ReaderT (Env u) IO) a) => Session u a (Protocol.Request a)
+listen :: (Serializable IO a) => Session u a (Protocol.Request a)
 listen = Session $ do
   ((socket, timeout, _), _) <- ask
-  failWith "Empty request" =<< do 
-    PipesPrelude.head $ PipesNetwork.fromSocketTimeout timeout socket 4096 >-> deserializingPipe
+  lift $ do
+    failWith "Empty request" =<< do 
+      PipesPrelude.head $ PipesNetwork.fromSocketTimeout timeout socket 4096 >-> deserializingPipe
   
-reply :: (Serializable (Session u a) a) => Protocol.Response a -> Session u a ()
-reply a = do
+reply :: (Serializable IO a) => Protocol.Response a -> Session u a ()
+reply a = Session $ do
   ((socket, timeout, _), _) <- ask
-  runEffect $ serializingProducer a >-> PipesNetwork.toSocketTimeout timeout socket
+  liftIO $ runEffect $ serializingProducer a >-> PipesNetwork.toSocketTimeout timeout socket
 
-interact :: (Serializable (ReaderT (Env u) IO) a, Serializable (Session u a) a) => Session u a ()
+interact :: (Serializable IO a) => Session u a ()
 interact = do
   listen >>= \case
     Protocol.Request_StartSession hash -> do
