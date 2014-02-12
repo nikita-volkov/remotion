@@ -14,6 +14,10 @@ module MessagingService.Util.Prelude
   )
   where
 
+-------------
+-- Control
+-------------
+
 -- base
 import Prelude as Exports hiding (concat, foldr, mapM_, sequence_, foldl1, maximum, minimum, product, sum, all, and, any, concatMap, elem, foldl, foldr1, notElem, or, mapM, sequence, FilePath, id, (.))
 import Control.Monad as Exports hiding (mapM_, sequence_, forM_, msum, mapM, sequence, forM)
@@ -58,12 +62,23 @@ import Control.Monad.State as Exports hiding (mapM_, sequence_, forM_, msum, map
 import Control.Monad.Reader as Exports hiding (mapM_, sequence_, forM_, msum, mapM, sequence, forM)
 import Control.Monad.Writer as Exports hiding (mapM_, sequence_, forM_, msum, mapM, sequence, forM, Any)
 import Control.Monad.Trans as Exports
+import Control.Monad.Error as Exports hiding (mapM_, sequence_, forM_, msum, mapM, sequence, forM)
 
--- stm
-import Control.Concurrent.STM as Exports
+-- errors
+import Control.Error as Exports
+
+-- placeholders
+import Development.Placeholders as Exports
 
 -- bytestring
 import Data.ByteString as Exports (ByteString)
+
+-------------
+-- Data
+-------------
+
+-- time
+import Data.Time.Clock as Exports
 
 -- text
 import Data.Text as Exports (Text)
@@ -82,23 +97,25 @@ import Filesystem.Path as Exports (FilePath)
 -- hashable
 import Data.Hashable as Exports (Hashable(..), hash)
 
+-------------
+-- Streaming
+-------------
+
 -- pipes
 import Pipes as Exports
 
 -- pipes-cereal-plus
 import PipesCerealPlus as Exports
 
--- either
-import Control.Error as Exports
+-------------
+-- Concurrency
+-------------
+
+-- stm
+import Control.Concurrent.STM as Exports
 
 -- cio
 import CIO as Exports
-
--- placeholders
-import Development.Placeholders as Exports
-
--- time
-import Data.Time.Clock as Exports
 
 
 import qualified Data.ByteString.Lazy
