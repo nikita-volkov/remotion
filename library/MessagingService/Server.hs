@@ -2,7 +2,7 @@ module MessagingService.Server where
 
 import MessagingService.Util.Prelude
 import qualified MessagingService.Protocol as Protocol
-import qualified MessagingService.Server.ClientState as ClientState
+import qualified MessagingService.Server.Session as Session
 import qualified MessagingService.Util.FileSystem as FS
 import qualified Network
 import qualified Network.Socket
