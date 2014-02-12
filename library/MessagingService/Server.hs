@@ -10,7 +10,6 @@ module MessagingService.Server
     Log,
     Session.ProcessMessage,
     Session.State,
-    Stop,
   )
   where
 
@@ -22,16 +21,59 @@ import qualified Network.Socket
 
 
 -- | 
--- Start the server with the provided settings,
--- returning a function to stop it, releasing all resources.
+-- Start the server with the provided settings and
+-- return a handle to its thread, which can later be used to stop it,
+-- or block until it raises any exception (which really should not be).
+-- 
+-- Here is an example of how you can run and stop your server: 
+-- 
+-- @
+-- import CIO
+-- import qualified MessagingService.Server as Server
+-- main = do
+--   runCIO 100 $ do
+--     let settings = ...
+--     -- Run the server asynchronously
+--     serverFork <- Server.start settings
+--     -- This is how we can stop the server:
+--     let stopServer = killCIO serverFork
+--     ...
+--     -- This is how we can block until the \"serverFork\" thread finishes either
+--     -- by means of \"stopServer\" or an exception get thrown.
+--     -- In case of exceptions \"waitCIO\" rethrows them in the current thread.
+--     waitCIO serverFork
+-- @
+-- 
+-- In the above example we've set the maximum number of concurrent threads to 100.
+-- The amount of connections your server handles directly depends on that parameter.
+-- All the exceeding connections get put on a wait list.
+-- It must also be mentioned that using "killCIO" to stop servers is safe,
+-- and all the resources get released.
 -- 
 -- Why the `CIO` monad? Because composition, that's why!
--- You can run multiple servers with a shared thread pool,
+-- 
+-- * You can run multiple servers with a shared thread pool,
 -- meaning a shared connection pool. 
--- You can compose them with whatever other concurrent things you do, 
+-- 
+-- * You can compose them with whatever other concurrent things you do, 
 -- but still share a thread pool.
 -- 
-start :: (Serializable IO i, Serializable IO o) => Settings i o s -> CIO Stop
+-- * You can kill groups of servers and other concurrent things, e.g.:
+-- 
+-- @
+-- main = do
+--   ...
+--   -- Everything inside that block shares a pool of a hundred threads.
+--   runCIO 100 $ do
+--     groupFork <- forkCIO $ do
+--       Server.start server1Settings
+--       Server.start server2Settings
+--       ... -- whatever you like
+--     let killThemAll = killCIO groupFork
+--     ...
+-- @
+-- 
+start :: (Serializable IO i, Serializable IO o) => Settings i o s -> CIO (ForkCIO ())
 start (listeningMode, timeout, log, processMessage) = do
 
   let (portID, auth) = case listeningMode of
@@ -41,7 +83,7 @@ start (listeningMode, timeout, log, processMessage) = do
   listeningSocket <- liftIO $ Network.listenOn portID
 
   let finalizer = liftIO $ Network.sClose listeningSocket
-  listenerFork <- forkFinallyCIO finalizer $ do
+  forkFinallyCIO finalizer $ do
     forever $ do
       liftIO $ log "Listening"
       (connectionSocket, _) <- liftIO $ Network.Socket.accept listeningSocket
@@ -51,9 +93,6 @@ start (listeningMode, timeout, log, processMessage) = do
         let settings = (connectionSocket, timeout, auth, processMessage)
         ei <- liftIO $ runEitherT $ Session.run Session.interact settings
         either (liftIO . log . ("Session error: " <>)) (const $ return ()) ei
-  
-  return $ void $ killCIO listenerFork
-
 
 -- | Settings of how to run the server.
 type Settings i o s = (ListeningMode, Session.Timeout, Log, Session.ProcessMessage i o s)
@@ -80,7 +119,3 @@ type Port = Int
 -- If you want to somehow reformat the output, you're welcome: 
 -- @(Data.Text.IO.'Data.Text.IO.putStrLn' . (\"MessagingService.Server: \" `<>`))@.
 type Log = Text -> IO ()
-
--- |
--- A function which shuts the server down, while closing all sockets.
-type Stop = CIO ()
