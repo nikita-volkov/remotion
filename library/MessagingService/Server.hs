@@ -1,8 +1,8 @@
 module MessagingService.Server
   (
-    listen,
+    start,
     Settings,
-    ListeningMode,
+    ListeningMode(..),
     Port,
     Session.Authenticate,
     Session.Hash,
@@ -10,6 +10,7 @@ module MessagingService.Server
     Log,
     Session.ProcessMessage,
     Session.State,
+    Stop,
   )
   where
 
@@ -21,69 +22,17 @@ import qualified Network.Socket
 
 
 -- | 
--- Start the server with the provided settings.
+-- Start the server with the provided settings,
+-- returning a function to stop it, releasing all resources.
 -- 
--- This is a blocking operation.
--- If all your executable does is just run the server, 
--- then all you need is run the `CIO` monad,
--- while setting the maximum number of concurrent threads.
--- The amount of concurrent connections your server handles 
--- directly depends on this parameter.
--- All the exceeding connections will be put on a wait list.
--- In the following case we set it to 100:
--- 
--- @
--- main = runCIO 100 $ listen settings
---   where settings = ...
--- @
--- 
--- If your executable does more than just run the server,
--- you should run the server asynchronously. 
--- This will also provide you with the ability to stop it.
--- E.g.:
--- This is all achievable with the standard concurrency primitives of the "cio" library.
--- 
--- @
--- main = do
---   runCIO 100 $ do
---     let settings = ...
---     -- Run the server asynchronously
---     serverFork <- forkCIO $ listen settings
---     -- This is how we can stop the server:
---     let stopServer = killCIO serverFork
---     ...
---     -- This is how we can block until the `serverFork` thread finishes either
---     -- by means of `stopServer` or an exception get thrown.
---     -- In case of exceptions `waitCIO` rethrows them in the current thread.
---     waitCIO serverFork
--- @
--- 
--- Why the `CIO` monad? Because composition!!
--- 
--- * You can run multiple servers with a shared thread pool,
+-- Why the `CIO` monad? Because composition, that's why!
+-- You can run multiple servers with a shared thread pool,
 -- meaning a shared connection pool. 
--- 
--- * You can compose it with whatever other concurrent things you do, 
+-- You can compose them with whatever other concurrent things you do, 
 -- but still share a thread pool.
 -- 
--- * You can kill groups of servers and other concurrent things, e.g.:
--- 
--- @
--- main = do
---   ...
---   -- Everything inside that block shares a pool of a hundred threads.
---   runCIO 100 $ do
---     groupFork <- 
---       forkCIO $ do
---         forkCIO $ listen server1Settings
---         forkCIO $ listen server2Settings
---         forkCIO $ ... -- whatever you like
---     let killThemAll = killCIO groupFork
---     ...
--- @
--- 
-listen :: (Serializable IO i, Serializable IO o) => Settings i o s -> CIO ()
-listen (listeningMode, timeout, log, processMessage) = do
+start :: (Serializable IO i, Serializable IO o) => Settings i o s -> CIO Stop
+start (listeningMode, timeout, log, processMessage) = do
 
   let (portID, auth) = case listeningMode of
         ListeningMode_Host port auth -> (Network.PortNumber $ fromIntegral port, auth)
@@ -91,19 +40,19 @@ listen (listeningMode, timeout, log, processMessage) = do
 
   listeningSocket <- liftIO $ Network.listenOn portID
 
-  forever $ do
-    liftIO $ log "Listening"
-    (connectionSocket, _) <- liftIO $ Network.Socket.accept listeningSocket
-    liftIO $ log "Client connected"
-    sessionFork <- forkCIO $ do
-      let settings = (connectionSocket, timeout, auth, processMessage)
-      ei <- liftIO $ runEitherT $ Session.run Session.interact settings
-      either (liftIO . log . ("Session error: " <>)) (const $ return ()) ei
-    -- Register a waiter of the session thread to finish somehow to release the socket:
-    forkCIO $ do
-      waitCIO' sessionFork
-      liftIO $ Network.sClose connectionSocket
-
+  let finalizer = liftIO $ Network.sClose listeningSocket
+  listenerFork <- forkFinallyCIO finalizer $ do
+    forever $ do
+      liftIO $ log "Listening"
+      (connectionSocket, _) <- liftIO $ Network.Socket.accept listeningSocket
+      liftIO $ log "Client connected"
+      let finalizer = liftIO $ Network.sClose connectionSocket
+      forkFinallyCIO finalizer $ do
+        let settings = (connectionSocket, timeout, auth, processMessage)
+        ei <- liftIO $ runEitherT $ Session.run Session.interact settings
+        either (liftIO . log . ("Session error: " <>)) (const $ return ()) ei
+  
+  return $ void $ killCIO listenerFork
 
 
 -- | Settings of how to run the server.
@@ -132,3 +81,6 @@ type Port = Int
 -- @(Data.Text.IO.'Data.Text.IO.putStrLn' . (\"MessagingService.Server: \" `<>`))@.
 type Log = Text -> IO ()
 
+-- |
+-- A function which shuts the server down, while closing all sockets.
+type Stop = CIO ()
