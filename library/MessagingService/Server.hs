@@ -82,14 +82,14 @@ start (listeningMode, timeout, log, processMessage) = do
 
   listeningSocket <- liftIO $ Network.listenOn portID
 
-  let finalizer = liftIO $ Network.sClose listeningSocket
-  forkFinallyCIO finalizer $ do
+  let onDeath = liftIO $ Network.sClose listeningSocket
+  forkOnDeathCIO onDeath $ do
     forever $ do
       liftIO $ log "Listening"
       (connectionSocket, _) <- liftIO $ Network.Socket.accept listeningSocket
       liftIO $ log "Client connected"
-      let finalizer = liftIO $ Network.sClose connectionSocket
-      forkFinallyCIO finalizer $ do
+      let onDeath = liftIO $ Network.sClose connectionSocket
+      forkOnDeathCIO onDeath $ do
         let settings = (connectionSocket, timeout, auth, processMessage)
         ei <- liftIO $ runEitherT $ Session.run Session.interact settings
         either (liftIO . log . ("Session error: " <>)) (const $ return ()) ei
