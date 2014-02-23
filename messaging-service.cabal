@@ -56,6 +56,7 @@ library
     pipes >= 4.0 && < 4.2,
     pipes-bytestring == 2.0.*,
     pipes-cereal-plus >= 0.3.1 && < 0.4,
+    pipes-parse > 3.0.0,
     -- networking:
     network == 2.4.*,
     network-simple == 0.3.*,
