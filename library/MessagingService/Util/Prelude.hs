@@ -7,10 +7,11 @@ module MessagingService.Util.Prelude
 
     (?:),
     traceM,
-    applyAll,
     packText,
     unpackText,
     bug,
+    (|>),
+    (<|),
   )
   where
 
@@ -65,7 +66,7 @@ import Control.Monad.Trans as Exports
 import Control.Monad.Error as Exports hiding (mapM_, sequence_, forM_, msum, mapM, sequence, forM)
 
 -- errors
-import Control.Error as Exports
+import Control.Error as Exports hiding ((?:))
 
 -- placeholders
 import Development.Placeholders as Exports
@@ -135,10 +136,15 @@ maybeA ?: b = fromMaybe b maybeA
 traceM :: (Monad m) => String -> m ()
 traceM s = trace s $ return ()
 
-applyAll :: Monad m => [a -> m b] -> a -> m [b]
-applyAll ops a = sequence $ map ($ a) ops
-
 packText = Data.Text.pack
 unpackText = Data.Text.unpack
 
 bug = placeholderNoWarning . (++) "'messaging-service' package bug: "
+
+(|>) :: a -> (a -> b) -> b
+a |> aToB = aToB a
+{-# INLINE (|>) #-}
+
+(<|) :: (a -> b) -> a -> b
+aToB <| a = aToB a
+{-# INLINE (<|) #-}
