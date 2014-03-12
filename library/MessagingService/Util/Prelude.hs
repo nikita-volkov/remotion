@@ -12,6 +12,10 @@ module MessagingService.Util.Prelude
     bug,
     (|>),
     (<|),
+    millisToDiff,
+    microsToDiff,
+    diffToMillis,
+    diffToMicros,
   )
   where
 
@@ -157,3 +161,8 @@ a |> aToB = aToB a
 (<|) :: (a -> b) -> a -> b
 aToB <| a = aToB a
 {-# INLINE (<|) #-}
+
+millisToDiff = (*(10^9)) >>> fromIntegral
+microsToDiff = (*(10^6)) >>> fromIntegral
+diffToMillis = realToFrac >>> (*(10^3)) >>> round
+diffToMicros = realToFrac >>> (*(10^6)) >>> round
