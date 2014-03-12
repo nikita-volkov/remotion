@@ -40,7 +40,7 @@ import Data.Fixed as Exports
 import Data.Ix as Exports
 import Data.Data as Exports
 import Text.Read as Exports (readMaybe, readEither)
-import Control.Exception as Exports hiding (tryJust)
+import Control.Exception as Exports hiding (tryJust, assert)
 import Control.Concurrent as Exports hiding (yield)
 import System.Mem.StableName as Exports
 import System.Timeout as Exports
@@ -71,8 +71,8 @@ import Control.Error as Exports hiding ((?:))
 -- placeholders
 import Development.Placeholders as Exports
 
--- bytestring
-import Data.ByteString as Exports (ByteString)
+-- loch-th
+import Debug.Trace.LocationTH as Exports
 
 -------------
 -- Data
@@ -80,6 +80,9 @@ import Data.ByteString as Exports (ByteString)
 
 -- time
 import Data.Time.Clock as Exports
+
+-- bytestring
+import Data.ByteString as Exports (ByteString)
 
 -- text
 import Data.Text as Exports (Text)
@@ -92,11 +95,25 @@ import Data.IntSet as Exports (IntSet)
 import Data.Sequence as Exports (Seq)
 import Data.Tree as Exports (Tree)
 
--- system-filepath
-import Filesystem.Path as Exports (FilePath)
-
 -- hashable
 import Data.Hashable as Exports (Hashable(..), hash)
+
+-------------
+-- Concurrency
+-------------
+
+-- stm
+import Control.Concurrent.STM as Exports hiding (check)
+
+-- cio
+import CIO as Exports
+
+-------------
+-- File-system
+-------------
+
+-- system-filepath
+import Filesystem.Path as Exports (FilePath)
 
 -------------
 -- Streaming
@@ -107,16 +124,6 @@ import Pipes as Exports
 
 -- pipes-cereal-plus
 import PipesCerealPlus as Exports
-
--------------
--- Concurrency
--------------
-
--- stm
-import Control.Concurrent.STM as Exports
-
--- cio
-import CIO as Exports
 
 
 import qualified Data.ByteString.Lazy
@@ -139,7 +146,9 @@ traceM s = trace s $ return ()
 packText = Data.Text.pack
 unpackText = Data.Text.unpack
 
-bug = placeholderNoWarning . (++) "'messaging-service' package bug: "
+bug = [e| $failure . (msg <>) |]
+  where
+    msg = "A \"messaging-service\" package bug: " :: String
 
 (|>) :: a -> (a -> b) -> b
 a |> aToB = aToB a

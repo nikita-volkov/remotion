@@ -78,6 +78,7 @@ library
     text,
     bytestring,
     -- control:
+    loch-th == 0.2.*,
     placeholders == 0.1.*,
     errors >= 1.4.4,
     mtl,
