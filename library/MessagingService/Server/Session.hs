@@ -18,7 +18,8 @@ type Env i o s = (Settings i o s, SessionState s)
 type Settings i o s = (Network.Socket.Socket, Timeout, Authenticate, ProcessMessage i o s)
 
 -- |
--- A session timeout in ms. Period of keepalive signaling depends on that parameter.
+-- A session timeout in microseconds. 
+-- The period of keepalive signaling depends on that parameter.
 -- If you don't want excessive requests, just make it a couple of minutes.
 type Timeout = Int
 
@@ -57,45 +58,46 @@ run (Session t) settings = do
   state <- liftIO $ (,) <$> newIORef False <*> newIORef Nothing
   runReaderT t (settings, state)
 
-listen :: (Serializable IO i) => Session i o s (Protocol.Request i)
-listen = Session $ do
+receive :: (Serializable IO i) => Session i o s (Protocol.Request i)
+receive = Session $ do
   ((socket, timeout, _, _), _) <- ask
   lift $ do
     failWith "Empty request" =<< do 
       PipesPrelude.head $ PipesNetwork.fromSocketTimeout timeout socket 4096 >-> deserializingPipe
   
-reply :: (Serializable IO o) => Protocol.Response o -> Session i o s ()
-reply a = Session $ do
+send :: (Serializable IO o) => Protocol.Response o -> Session i o s ()
+send a = Session $ do
   ((socket, timeout, _, _), _) <- ask
   liftIO $ runEffect $ serializingProducer a >-> PipesNetwork.toSocketTimeout timeout socket
 
 interact :: (Serializable IO i, Serializable IO o) => Session i o s ()
 interact = do
   ((_, _, auth, processMessage), (authenticated, state)) <- ask
-  listen >>= \case
+  receive >>= \case
     Protocol.Request_StartSession hash -> do
       liftIO (auth hash) >>= \case
         True -> do
-          reply $ Protocol.Response_StartSession True
+          send $ Protocol.Response_StartSession True
           liftIO $ writeIORef authenticated True
           interact
         False -> do
-          reply $ Protocol.Response_StartSession False
-    Protocol.Request_CloseSession -> do
-      reply $ Protocol.Response_CloseSession
+          send $ Protocol.Response_StartSession False
     Protocol.Request_Session spec -> do
       liftIO (readIORef authenticated) >>= \case
         True -> case spec of
           Protocol.Request_Session_Spec_Message a -> do
-            replyMessage <- liftIO $ processMessage state a
-            reply $ Protocol.Response_Session $ Right $ 
-                    Protocol.Response_Session_Spec_Message replyMessage
+            sendMessage <- liftIO $ processMessage state a
+            send $ Protocol.Response_Session $ Right $ 
+                   Protocol.Response_Session_Spec_Message sendMessage
             interact
           Protocol.Request_Session_Spec_CheckIn -> do
-            reply $ Protocol.Response_Session $ Right $ 
-                    Protocol.Response_Session_Spec_CheckIn
+            send $ Protocol.Response_Session $ Right $ 
+                   Protocol.Response_Session_Spec_CheckIn
             interact
+          Protocol.Request_Session_Spec_Close -> do
+            send $ Protocol.Response_Session $ Right $ 
+                   Protocol.Response_Session_Spec_Close
         False -> do
-          reply $ Protocol.Response_Session $ Left $ 
-                  Protocol.Response_Session_Failure_Unauthenticated
+          send $ Protocol.Response_Session $ Left $ 
+                 Protocol.Response_Session_Failure_Unauthenticated
 
