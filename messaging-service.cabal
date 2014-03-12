@@ -44,13 +44,13 @@ source-repository head
 library
   hs-source-dirs:
     library
-  exposed-modules:
-    MessagingService.Server
   other-modules:
     MessagingService.Server.Session
     MessagingService.Protocol
     MessagingService.Util.FileSystem
     MessagingService.Util.Prelude
+  exposed-modules:
+    MessagingService.Server
   build-depends:
     -- streaming:
     pipes >= 4.0 && < 4.2,
