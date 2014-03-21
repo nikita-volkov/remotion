@@ -47,6 +47,7 @@ library
   other-modules:
     MessagingService.Server.Session
     MessagingService.Protocol
+    MessagingService.Util.IOBuffer
     MessagingService.Util.FileSystem
     MessagingService.Util.Prelude
   exposed-modules:
@@ -68,6 +69,7 @@ library
     system-filepath,
     -- concurrency:
     cio == 0.2.*,
+    async == 2.0.*,
     concurrent-extra == 0.7.*,
     stm,
     -- data:
