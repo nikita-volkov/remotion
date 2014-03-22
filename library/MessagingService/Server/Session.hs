@@ -119,8 +119,9 @@ interact = do
       Rq.CloseSession -> do
         send $ Right (Nothing, timeout)
       Rq.Ping -> do
-        send $ Right (Nothing, timeout)
-        interact
+        checkingAuthentication $ do
+          send $ Right (Nothing, timeout)
+          interact
     Right m -> do
       checkingAuthentication $ do
         reply <- liftIO $ processMessage state m
