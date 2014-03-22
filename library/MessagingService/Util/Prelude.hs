@@ -17,7 +17,6 @@ module MessagingService.Util.Prelude
     microsToDiff,
     diffToMillis,
     diffToMicros,
-    forkFinallyRethrowing,
   )
   where
 
@@ -47,7 +46,6 @@ import Data.Ix as Exports
 import Data.Data as Exports
 import Text.Read as Exports (readMaybe, readEither)
 import Control.Exception as Exports hiding (tryJust, assert)
-import Control.Concurrent as Exports hiding (yield)
 import System.Mem.StableName as Exports
 import System.Timeout as Exports
 import System.Exit as Exports
@@ -107,6 +105,10 @@ import Data.Hashable as Exports (Hashable(..), hash)
 -------------
 -- Concurrency
 -------------
+
+-- base
+import Control.Concurrent.MVar as Exports
+import Control.Concurrent.Chan as Exports
 
 -- stm
 import Control.Concurrent.STM as Exports hiding (check)
@@ -173,11 +175,3 @@ millisToDiff = (*(10^9)) >>> fromIntegral
 microsToDiff = (*(10^6)) >>> fromIntegral
 diffToMillis = realToFrac >>> (*(10^3)) >>> round
 diffToMicros = realToFrac >>> (*(10^6)) >>> round
-
-forkFinallyRethrowing :: IO () -> IO () -> IO ThreadId
-forkFinallyRethrowing finally io = do
-  mainTID <- myThreadId
-  forkFinally io $ \case
-    Right _ -> finally
-    Left e | Just ThreadKilled <- fromException e -> finally
-    Left (SomeException e) -> finally >> throwTo mainTID e

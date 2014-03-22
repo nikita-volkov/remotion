@@ -45,6 +45,7 @@ library
   hs-source-dirs:
     library
   other-modules:
+    MessagingService.Util.Forking
     MessagingService.Protocol.Response
     MessagingService.Protocol.Request
     MessagingService.Server.Session

@@ -20,8 +20,8 @@ module MessagingService.Server
   where
 
 import MessagingService.Util.Prelude hiding (listen)
-import qualified Control.Concurrent.Async as A
 import qualified MessagingService.Server.Session as Session
+import qualified MessagingService.Util.Forking as F
 import qualified MessagingService.Util.FileSystem as FS
 import qualified Network
 import qualified Network.Socket
@@ -91,16 +91,16 @@ start (listeningMode, timeout, maxClients, log, processMessage) = do
             either (liftIO . log . ("Session error: " <>) . packText . show) 
                    (const $ return ())
           registerThread = do
-            tid <- myThreadId
+            tid <- F.myThreadId
             modifyMVar_ sessionThreadsVar $ return . Set.insert tid
           unregisterThread = do
-            tid <- myThreadId
+            tid <- F.myThreadId
             modifyMVar_ sessionThreadsVar $ return . Set.delete tid
       if slots <= 0
         then do
           let timeout = 10^6
               settings = (connectionSocket, timeout, auth, processMessage)
-              forkRethrowing = forkFinallyRethrowing $ do
+              forkRethrowing = F.forkRethrowingFinally $ do
                 Network.sClose connectionSocket
                 unregisterThread
           forkRethrowing $ do
@@ -109,7 +109,7 @@ start (listeningMode, timeout, maxClients, log, processMessage) = do
           return slots
         else do
           let settings = (connectionSocket, timeout, auth, processMessage)
-              forkRethrowing = forkFinallyRethrowing $ do
+              forkRethrowing = F.forkRethrowingFinally $ do
                 modifyMVar_ slotsVar (return . succ)
                 Network.sClose connectionSocket
                 unregisterThread
@@ -118,13 +118,13 @@ start (listeningMode, timeout, maxClients, log, processMessage) = do
             runSession (Session.sendOkay >> Session.interact) settings
           return $ slots - 1
 
-  listeningAsync <- A.async listen
+  (listenThread, listenWait) <- F.forkRethrowingWithWait listen
   return $ 
     let stop = do
-          A.cancel listeningAsync
-          takeMVar sessionThreadsVar >>= mapM_ killThread
+          F.killThread listenThread
+          takeMVar sessionThreadsVar >>= mapM_ F.killThread
           Network.sClose listeningSocket
-        wait = A.wait listeningAsync
+        wait = void listenWait
         in Server wait stop
 
 -- |
