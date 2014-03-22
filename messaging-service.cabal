@@ -45,8 +45,9 @@ library
   hs-source-dirs:
     library
   other-modules:
+    MessagingService.Protocol.Response
+    MessagingService.Protocol.Request
     MessagingService.Server.Session
-    MessagingService.Protocol
     MessagingService.Util.IOBuffer
     MessagingService.Util.FileSystem
     MessagingService.Util.Prelude
@@ -68,7 +69,6 @@ library
     system-fileio,
     system-filepath,
     -- concurrency:
-    cio == 0.2.*,
     async == 2.0.*,
     concurrent-extra == 0.7.*,
     stm,

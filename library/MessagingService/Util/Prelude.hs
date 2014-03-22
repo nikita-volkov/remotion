@@ -12,10 +12,12 @@ module MessagingService.Util.Prelude
     bug,
     (|>),
     (<|),
+    (|$>),
     millisToDiff,
     microsToDiff,
     diffToMillis,
     diffToMicros,
+    forkFinallyRethrowing,
   )
   where
 
@@ -109,9 +111,6 @@ import Data.Hashable as Exports (Hashable(..), hash)
 -- stm
 import Control.Concurrent.STM as Exports hiding (check)
 
--- cio
-import CIO as Exports
-
 -------------
 -- File-system
 -------------
@@ -162,7 +161,23 @@ a |> aToB = aToB a
 aToB <| a = aToB a
 {-# INLINE (<|) #-}
 
+-- | 
+-- The following are all the same:
+-- fmap f a == f <$> a == a |> fmap f == a |$> f
+-- 
+-- This operator accomodates the left-to-right operators: >>=, >>>, |>.
+(|$>) = flip fmap
+{-# INLINE (|$>) #-}
+
 millisToDiff = (*(10^9)) >>> fromIntegral
 microsToDiff = (*(10^6)) >>> fromIntegral
 diffToMillis = realToFrac >>> (*(10^3)) >>> round
 diffToMicros = realToFrac >>> (*(10^6)) >>> round
+
+forkFinallyRethrowing :: IO () -> IO () -> IO ThreadId
+forkFinallyRethrowing finally io = do
+  mainTID <- myThreadId
+  forkFinally io $ \case
+    Right _ -> finally
+    Left e | Just ThreadKilled <- fromException e -> finally
+    Left (SomeException e) -> finally >> throwTo mainTID e
