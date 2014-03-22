@@ -102,7 +102,7 @@ start (listeningMode, timeout, maxClients, log, processMessage) = do
       if slots <= 0
         then do
           let timeout = 10^6
-              settings = (connectionSocket, timeout, auth, processMessage)
+              settings = ((connectionSocket, timeout), (timeout, auth, processMessage))
               forkRethrowing = F.forkRethrowingFinally $ do
                 Network.sClose connectionSocket
                 unregisterThread
@@ -111,7 +111,7 @@ start (listeningMode, timeout, maxClients, log, processMessage) = do
             runSession Session.sendTooManyConnections settings
           return slots
         else do
-          let settings = (connectionSocket, timeout, auth, processMessage)
+          let settings = ((connectionSocket, timeout), (timeout, auth, processMessage))
               forkRethrowing = F.forkRethrowingFinally $ do
                 modifyMVar_ slotsVar (return . succ)
                 Network.sClose connectionSocket
