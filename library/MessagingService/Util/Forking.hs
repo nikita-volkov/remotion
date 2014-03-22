@@ -27,10 +27,11 @@ forkRethrowingFinally :: IO () -> IO () -> IO ThreadId
 forkRethrowingFinally finally io = do
   parentTID <- myThreadId
   childTID <- mask $ \restore -> forkIO' $ do
+    let rethrowingFinally = catch finally $ \(SomeException e) -> throwTo parentTID e
     try (restore io) >>= \case
-      Left e | Just ThreadKilled <- fromException e -> finally
-      Left (SomeException e) -> finally >> throwTo parentTID e
-      Right r -> finally
+      Left e | Just ThreadKilled <- fromException e -> rethrowingFinally
+      Left (SomeException e) -> rethrowingFinally >> throwTo parentTID e
+      Right r -> rethrowingFinally
   return childTID
 
 forkRethrowingFinallyWithWait :: IO () -> IO a -> IO (ThreadId, IO (Maybe a))
@@ -38,10 +39,11 @@ forkRethrowingFinallyWithWait finally io = do
   var <- newEmptyMVar
   parentTID <- myThreadId
   childTID <- mask $ \restore -> forkIO' $ do
+    let rethrowingFinally = catch finally $ \(SomeException e) -> throwTo parentTID e
     try (restore io) >>= \case
-      Left e | Just ThreadKilled <- fromException e -> finally >> putMVar var Nothing
-      Left (SomeException e) -> finally >> throwTo parentTID e
-      Right r -> finally >> putMVar var (Just r)
+      Left e | Just ThreadKilled <- fromException e -> rethrowingFinally >> putMVar var Nothing
+      Left (SomeException e) -> rethrowingFinally >> throwTo parentTID e >> putMVar var Nothing
+      Right r -> rethrowingFinally >> putMVar var (Just r)
   return (childTID, takeMVar var)
 
 forkRethrowingWithWait :: IO a -> IO (ThreadId, IO (Maybe a))

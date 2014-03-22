@@ -88,16 +88,17 @@ start (listeningMode, timeout, maxClients, log, processMessage) = do
       log "Listening"
       (connectionSocket, _) <- Network.Socket.accept listeningSocket
       log "Client connected"
-      let runSession sess settings = 
-            Session.run sess settings >>= 
-            either (liftIO . log . ("Session error: " <>) . packText . show) 
-                   (const $ return ())
-          registerThread = do
-            tid <- F.myThreadId
-            modifyMVar_ sessionThreadsVar $ return . Set.insert tid
-          unregisterThread = do
-            tid <- F.myThreadId
-            modifyMVar_ sessionThreadsVar $ return . Set.delete tid
+      let 
+        runSession sess settings = 
+          Session.run sess settings >>= 
+          either (liftIO . log . ("Session error: " <>) . packText . show) 
+                 (const $ return ())
+        registerThread = do
+          tid <- F.myThreadId
+          modifyMVar_ sessionThreadsVar $ return . Set.insert tid
+        unregisterThread = do
+          tid <- F.myThreadId
+          modifyMVar_ sessionThreadsVar $ return . Set.delete tid
       if slots <= 0
         then do
           let timeout = 10^6
@@ -119,13 +120,13 @@ start (listeningMode, timeout, maxClients, log, processMessage) = do
             registerThread
             runSession (Session.sendOkay >> Session.interact) settings
           return $ slots - 1
+    cleanUp = do
+      takeMVar sessionThreadsVar >>= mapM_ F.killThread
+      Network.sClose listeningSocket
 
-  (listenThread, listenWait) <- F.forkRethrowingWithWait listen
+  (listenThread, listenWait) <- F.forkRethrowingFinallyWithWait cleanUp listen
   return $ 
-    let stop = do
-          F.killThread listenThread
-          takeMVar sessionThreadsVar >>= mapM_ F.killThread
-          Network.sClose listeningSocket
+    let stop = F.killThread listenThread
         wait = void listenWait
         in Server wait stop
 

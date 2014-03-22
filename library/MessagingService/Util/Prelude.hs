@@ -107,8 +107,7 @@ import Data.Hashable as Exports (Hashable(..), hash)
 -------------
 
 -- base
-import Control.Concurrent.MVar as Exports
-import Control.Concurrent.Chan as Exports
+import Control.Concurrent as Exports hiding (yield)
 
 -- stm
 import Control.Concurrent.STM as Exports hiding (check)
