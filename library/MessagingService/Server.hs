@@ -4,10 +4,10 @@ module MessagingService.Server
     Settings,
     ListeningMode(..),
     Port,
-    MaxClients,
     Session.Authenticate,
-    Session.Hash,
+    Session.Credentials,
     Session.Timeout,
+    MaxClients,
     Log,
     Session.ProcessMessage,
     Session.State,
@@ -30,7 +30,9 @@ import qualified Data.Set as Set
 
 -- | The Server handle.
 data Server = Server {
+  -- | Wait for the server to either due to an error or after 'stop' is called on it.
   wait :: IO (),
+  -- | Shut the server down, while releasing all resources.
   stop :: IO ()
 }
 

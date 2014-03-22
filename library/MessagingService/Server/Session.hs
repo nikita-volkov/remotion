@@ -29,16 +29,16 @@ type Timeout = Int
 -- If you want to provide access to anybody, use @(\_ -> return True)@.
 -- 
 -- An argument value of @Nothing@ means an attempt of anonymous authentication.
-type Authenticate = Maybe Hash -> IO Bool
+type Authenticate = Maybe Credentials -> IO Bool
 
 -- |
 -- Either a plain ASCII password or an encoding of some data, 
 -- e.g. an MD5 hash of a login-password pair or just a password.
-type Hash = ByteString
+type Credentials = ByteString
 
 -- | 
 -- A function which processes messages from client (@i@) and produces a response (@o@),
--- while managing a user-defined session state (@s@) per each client.
+-- while maintaining a user-defined session state (@s@) per each client.
 -- 
 -- This function essentially is what defines what your server actually does.
 type ProcessMessage i o s = State s -> i -> IO o

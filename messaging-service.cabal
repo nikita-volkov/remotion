@@ -5,9 +5,10 @@ version:
 synopsis:
   A minimalistic library for implementing client-server remote services
 description:
-  Provides an API abstracting over the typical tasks of client-server communication.
-  It automates the authentication process and keeping of the connection alive.
-  The user can implement protocols of any form based on messaging.
+  An API abstracting over the typical tasks of client-server communication.
+  It automates the authentication process, failure management and 
+  the task of keeping the connections alive.
+  The user can implement protocols of any form based.
 
   Useful for writing all kinds of services. 
   E.g., the <http://hackage.haskell.org/package/graph-db graph-db> 
