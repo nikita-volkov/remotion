@@ -21,8 +21,7 @@ type Timeout = Int
 data Failure =
   NoConnection |
   TimeoutReached |
-  CorruptData Text |
-  EmptyRequest
+  CorruptData Text
   deriving (Show)
 
 instance MonadTrans (ConnectionT i o) where
@@ -42,7 +41,7 @@ receive = ConnectionT $ do
   let pipe = PipesByteString.fromHandle handle >-> deserializingPipe
   pipe |> PipesPrelude.head |> runEitherT |> Timeout.timeout timeout |> try |> liftIO >>= \case
     Right (Just (Right (Just r))) -> return r
-    Right (Just (Right Nothing)) -> throwError $ EmptyRequest
+    Right (Just (Right Nothing)) -> throwError $ CorruptData "No data"
     Right (Just (Left t)) -> throwError $ CorruptData t
     Right Nothing -> throwError $ TimeoutReached
     Left ioe -> throwError $ ioeToFailure ioe

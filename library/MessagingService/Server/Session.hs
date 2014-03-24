@@ -58,7 +58,6 @@ receive :: (Serializable IO i, Serializable IO o) => Session i o s (Rq.Request i
 receive = do
   Session $ lift $ catchError C.receive $ \e -> do
     case e of
-      C.EmptyRequest -> C.send $ Left $ Rs.CorruptRequest "No data"
       C.TimeoutReached -> C.send $ Left $ Rs.TimeoutReached
       C.CorruptData t -> C.send $ Left $ Rs.CorruptRequest t
       _ -> return ()
