@@ -24,7 +24,6 @@ import qualified MessagingService.Server.Session as Session
 import qualified MessagingService.Util.Forking as F
 import qualified MessagingService.Util.FileSystem as FS
 import qualified Network
-import qualified Network.Socket
 import qualified Data.Set as Set
 
 
@@ -86,7 +85,7 @@ start (listeningMode, timeout, maxClients, log, processMessage) = do
   let 
     listen = forever $ modifyMVar_ slotsVar $ \slots -> do
       log "Listening"
-      (connectionSocket, _) <- Network.Socket.accept listeningSocket
+      (connectionSocket, _, _) <- Network.accept listeningSocket
       log "Client connected"
       let 
         runSession sess settings = 
@@ -104,7 +103,7 @@ start (listeningMode, timeout, maxClients, log, processMessage) = do
           let timeout = 10^6
               settings = ((connectionSocket, timeout), (timeout, auth, processMessage))
               forkRethrowing = F.forkRethrowingFinally $ do
-                Network.sClose connectionSocket
+                hClose connectionSocket
                 unregisterThread
           forkRethrowing $ do
             registerThread
@@ -114,7 +113,7 @@ start (listeningMode, timeout, maxClients, log, processMessage) = do
           let settings = ((connectionSocket, timeout), (timeout, auth, processMessage))
               forkRethrowing = F.forkRethrowingFinally $ do
                 modifyMVar_ slotsVar (return . succ)
-                Network.sClose connectionSocket
+                hClose connectionSocket
                 unregisterThread
           forkRethrowing $ do
             registerThread
