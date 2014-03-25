@@ -107,7 +107,7 @@ start (listeningMode, timeout, maxClients, log, processMessage) = do
                 unregisterThread
           forkRethrowing $ do
             registerThread
-            runSession Session.sendTooManyConnections settings
+            runSession Session.rejectWithTooManyConnections settings
           return slots
         else do
           let settings = ((connectionSocket, timeout), (timeout, auth, processMessage))
@@ -117,7 +117,7 @@ start (listeningMode, timeout, maxClients, log, processMessage) = do
                 unregisterThread
           forkRethrowing $ do
             registerThread
-            runSession (Session.sendOkay >> Session.interact) settings
+            runSession Session.standard settings
           return $ slots - 1
     cleanUp = do
       takeMVar sessionThreadsVar >>= mapM_ F.killThread

@@ -48,8 +48,8 @@ library
   other-modules:
     MessagingService.ConnectionT
     MessagingService.Util.Forking
-    MessagingService.Protocol.Response
-    MessagingService.Protocol.Request
+    MessagingService.Protocol.Server
+    MessagingService.Protocol.Client
     MessagingService.Server.Session
     MessagingService.Util.IOBuffer
     MessagingService.Util.FileSystem

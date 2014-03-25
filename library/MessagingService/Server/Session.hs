@@ -2,14 +2,14 @@ module MessagingService.Server.Session where
 
 import MessagingService.Util.Prelude hiding (State, listen, interact)
 import qualified MessagingService.ConnectionT as C
-import qualified MessagingService.Protocol.Request as Rq
-import qualified MessagingService.Protocol.Response as Rs
+import qualified MessagingService.Protocol.Client as PC
+import qualified MessagingService.Protocol.Server as PS
 
 
 -- | 
 -- A user session on server.
 newtype Session i o s r = 
-  Session (ReaderT (Env i o s) (C.ConnectionT (Rq.Request i) (Rs.Response o) IO) r)
+  Session (ReaderT (Env i o s) (C.ConnectionT (PC.Message i) (PS.Message o) IO) r)
   deriving (Functor, Applicative, Monad, MonadIO, MonadReader (Env i o s), MonadError C.Failure)
 type Env i o s = (Settings i o s, SessionState s)
 type Settings i o s = (Timeout, Authenticate, ProcessMessage i o s)
@@ -54,16 +54,16 @@ run (Session t) (connectionSettings, settings) = do
   state <- liftIO $ (,) <$> newIORef False <*> newIORef Nothing
   runReaderT t (settings, state) |> flip C.run connectionSettings
 
-receive :: (Serializable IO i, Serializable IO o) => Session i o s (Rq.Request i)
+receive :: (Serializable IO i, Serializable IO o) => Session i o s (PC.Message i)
 receive = do
   Session $ lift $ catchError C.receive $ \e -> do
     case e of
-      C.TimeoutReached -> C.send $ Left $ Rs.TimeoutReached
-      C.CorruptData t -> C.send $ Left $ Rs.CorruptRequest t
+      C.TimeoutReached -> C.send $ PS.TimeoutReached
+      C.CorruptData t -> C.send $ PS.CorruptRequest t
       _ -> return ()
     throwError e
 
-send :: (Serializable IO o) => Rs.Response o -> Session i o s ()
+send :: (Serializable IO o) => PS.Message o -> Session i o s ()
 send response = Session $ lift $ C.send response
 
 interact :: (Serializable IO i, Serializable IO o) => Session i o s ()
@@ -73,35 +73,35 @@ interact = do
     checkingAuthentication session = do
       readIORef authenticated |> liftIO >>= \case
         True -> session
-        False -> send $ Left Rs.Unauthenticated
+        False -> send $ PS.Unauthenticated
   receive >>= \case
-    Left cmd -> case cmd of
-      Rq.Authenticate hash -> do
-        liftIO (auth hash) >>= \case
-          True -> do
-            send $ Right (Nothing, timeout)
-            liftIO $ writeIORef authenticated True
-            interact
-          False -> do
-            send $ Left Rs.Unauthenticated
-      Rq.CloseSession -> do
-        send $ Right (Nothing, timeout)
-      Rq.Ping -> do
-        checkingAuthentication $ do
-          send $ Right (Nothing, timeout)
+    PC.Authenticate hash -> do
+      liftIO (auth hash) >>= \case
+        True -> do
+          send $ PS.Okay Nothing
+          liftIO $ writeIORef authenticated True
           interact
-    Right m -> do
+        False -> do
+          send $ PS.Unauthenticated
+    PC.CloseSession -> do
+      send $ PS.Okay Nothing
+    PC.Ping -> do
+      checkingAuthentication $ do
+        send $ PS.Okay Nothing
+        interact
+    PC.Data m -> do
       checkingAuthentication $ do
         reply <- liftIO $ processMessage state m
-        send $ Right (Just reply, timeout)
+        send $ PS.Okay $ Just reply
         interact
 
-sendTooManyConnections :: (Serializable IO o) => Session i o s ()
-sendTooManyConnections = send $ Left $ Rs.TooManyConnections
+rejectWithTooManyConnections :: (Serializable IO o) => Session i o s ()
+rejectWithTooManyConnections = send $ PS.TooManyConnections
 
-sendOkay :: (Serializable IO o) => Session i o s ()
-sendOkay = do
+greet :: (Serializable IO o) => Session i o s ()
+greet = do
   ((timeout, _, _), _) <- ask
-  send $ Right $ (Nothing, timeout)
+  send $ PS.Welcome timeout
 
-
+standard :: (Serializable IO i, Serializable IO o) => Session i o s ()
+standard = greet >> interact
