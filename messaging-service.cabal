@@ -46,7 +46,7 @@ library
   hs-source-dirs:
     library
   other-modules:
-    MessagingService.Handshake
+    MessagingService.Session.Handshake
     MessagingService.ConnectionT
     MessagingService.Util.Forking
     MessagingService.Protocol.Server
@@ -84,6 +84,7 @@ library
     text,
     bytestring,
     -- control:
+    free == 4.*,
     loch-th == 0.2.*,
     placeholders == 0.1.*,
     errors >= 1.4.4,
@@ -116,6 +117,7 @@ library
     QuasiQuotes
     DeriveDataTypeable
     GeneralizedNewtypeDeriving
+    DeriveFunctor
     RecordWildCards
     MultiWayIf
     LiberalTypeSynonyms
