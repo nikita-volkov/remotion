@@ -50,12 +50,12 @@ library
     MessagingService.Util.Forking
     MessagingService.Protocol.Server
     MessagingService.Protocol.Client
-    MessagingService.Server.Session
+    -- MessagingService.Server.Session
     MessagingService.Util.IOBuffer
     MessagingService.Util.FileSystem
     MessagingService.Util.Prelude
   exposed-modules:
-    MessagingService.Server
+    -- MessagingService.Server
   build-depends:
     -- streaming:
     pipes >= 4.0 && < 4.2,

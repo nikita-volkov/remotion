@@ -8,7 +8,7 @@ import qualified System.Timeout as Timeout
 
 
 -- | A connection, which can be used in both the server and the client.
-newtype ConnectionT i o m r = 
+newtype ConnectionT m r = 
   ConnectionT (ReaderT Settings (EitherT Failure m) r)
   deriving (Functor, Applicative, Monad, MonadIO, MonadReader Settings, MonadError Failure)
 
@@ -26,10 +26,10 @@ data Failure =
   CorruptData Text
   deriving (Show)
 
-instance MonadTrans (ConnectionT i o) where
+instance MonadTrans ConnectionT where
   lift = ConnectionT . lift . lift
 
-run :: ConnectionT i o m r -> Settings -> m (Either Failure r)
+run :: ConnectionT m r -> Settings -> m (Either Failure r)
 run (ConnectionT t) settings = runReaderT t settings |> runEitherT
 
 ioeToFailure :: IOException -> Failure
@@ -37,7 +37,7 @@ ioeToFailure e = ioeGetErrorType e |> \case
   ResourceVanished -> NoConnection
   _ -> $bug $ "Unexpected IOError: " <> show e
 
-receive :: (Serializable IO i, MonadIO m) => ConnectionT i o m i
+receive :: (Serializable IO i, MonadIO m) => ConnectionT m i
 receive = ConnectionT $ do
   (handle, timeout) <- ask
   let pipe = PipesByteString.fromHandle handle >-> deserializingPipe
@@ -48,7 +48,7 @@ receive = ConnectionT $ do
     Right Nothing -> throwError $ TimeoutReached
     Left ioe -> throwError $ ioeToFailure ioe
   
-send :: (Serializable IO o, MonadIO m, Applicative m) => o -> ConnectionT i o m ()
+send :: (Serializable IO o, MonadIO m, Applicative m) => o -> ConnectionT m ()
 send a = ConnectionT $ do
   (handle, timeout) <- ask
   let pipe = serializingProducer a >-> PipesByteString.toHandle handle
