@@ -12,7 +12,9 @@ newtype ConnectionT i o m r =
   ConnectionT (ReaderT Settings (EitherT Failure m) r)
   deriving (Functor, Applicative, Monad, MonadIO, MonadReader Settings, MonadError Failure)
 
-type Settings = (Handle, Timeout)
+type Settings = (Socket, Timeout)
+
+type Socket = Handle
 
 -- |
 -- A connection timeout in microseconds. 
