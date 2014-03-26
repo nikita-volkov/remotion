@@ -46,6 +46,7 @@ library
   hs-source-dirs:
     library
   other-modules:
+    MessagingService.Handshake
     MessagingService.ConnectionT
     MessagingService.Util.Forking
     MessagingService.Protocol.Server
