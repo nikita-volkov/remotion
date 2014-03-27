@@ -1,7 +1,7 @@
 module MessagingService.Client.InteractionT where
 
 import MessagingService.Util.Prelude hiding (State, listen, interact)
-import qualified MessagingService.Session as S
+import qualified MessagingService.SessionT as S
 import qualified Control.Concurrent.Lock as Lock
 
 

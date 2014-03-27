@@ -1,4 +1,4 @@
-module MessagingService.Session where
+module MessagingService.SessionT where
 
 import MessagingService.Util.Prelude
 import qualified Network.Socket

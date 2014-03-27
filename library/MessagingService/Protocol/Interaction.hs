@@ -1,12 +1,9 @@
-module MessagingService.Session.Interaction where
+module MessagingService.Protocol.Interaction where
 
-import MessagingService.Util.Prelude hiding (State)
-import Control.Monad.Free
-import Control.Monad.Free.TH
-import qualified MessagingService.Session as S
+import MessagingService.Util.Prelude
 
 
--- Protocol
+-- Interaction
 -----------------------------
 
 data Request a = 
@@ -17,11 +14,11 @@ data Request a =
 
 instance (Serializable m a) => Serializable m (Request a)
 
-type Response a = Either Failure (Maybe a)
+type Response a = Either FailureResponse (Maybe a)
 
 -- |
 -- A failure response from server.
-data Failure = 
+data FailureResponse = 
   -- | 
   -- Server was unable to deserialize the request.
   -- This is only expected happen in case of user's protocol mismatch.
@@ -31,5 +28,5 @@ data Failure =
   TimeoutReached
   deriving (Show, Generic)
 
-instance Serializable m Failure
+instance Serializable m FailureResponse
 

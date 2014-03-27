@@ -1,15 +1,15 @@
 {-# LANGUAGE CPP #-}
 module MessagingService.Client (
   ConnectionT,
-  -- ** Failure
-  Failure(..),
-  Handshake.ProtocolVersion,
   -- ** Execution and Configuration
   runConnectionT,
   Settings(..),
   URL(..),
   Handshake.Credentials(..),
   Handshake.UserProtocolVersion,
+  -- ** Failure
+  Failure(..),
+  Handshake.ProtocolVersion,
   -- ** Interaction
   request,
 )
@@ -18,9 +18,9 @@ where
 
 import MessagingService.Util.Prelude hiding (State, listen, interact)
 import qualified MessagingService.Util.Prelude as Prelude
-import qualified MessagingService.Session as S
-import qualified MessagingService.Session.Handshake as Handshake
-import qualified MessagingService.Session.Interaction as Interaction
+import qualified MessagingService.SessionT as S
+import qualified MessagingService.Protocol.Handshake as Handshake
+import qualified MessagingService.Protocol.Interaction as Interaction
 import qualified MessagingService.Client.InteractionT as I
 import qualified Control.Concurrent.Async.Lifted as A
 import qualified Control.Concurrent.Lock as Lock
@@ -65,7 +65,7 @@ data Failure =
   HandshakeFailure Handshake.Failure | 
   -- |
   -- A server-side failure concerning this connection.
-  InteractionFailure Interaction.Failure | 
+  InteractionFailure Interaction.FailureResponse | 
   -- |
   -- A client-side failure related to connection bookkeeping.
   SessionFailure S.Failure

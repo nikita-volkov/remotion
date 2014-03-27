@@ -1,23 +1,13 @@
-module MessagingService.Session.Handshake where
+module MessagingService.Protocol.Handshake where
 
 import MessagingService.Util.Prelude hiding (State)
 import Control.Monad.Free
 import Control.Monad.Free.TH
-import qualified MessagingService.Session as S
+import qualified MessagingService.SessionT as S
 
 
-type Handshake = Free HandshakeF
-
-data HandshakeF n =
-  GetAvailable (Bool -> n) |
-  GetClientProtocolVersion (ProtocolVersion -> n) |
-  GetServerProtocolVersion (ProtocolVersion -> n) |
-  GetClientUserProtocolVersion (UserProtocolVersion -> n) |
-  GetServerUserProtocolVersion (UserProtocolVersion -> n) |
-  GetCredentials (Credentials -> n) |
-  Authenticate Credentials (Bool -> n) |
-  GetTimeout (Timeout -> n)
-  deriving (Functor)
+-- Protocol
+-----------------------------
 
 -- |
 -- A version of the internal protocol of \"messaging-service\"
@@ -27,11 +17,6 @@ type ProtocolVersion = Int
 -- A user-supplied version of user's protocol
 -- used for checking of server-client match.
 type UserProtocolVersion = Int
-
--- | 
--- A function, which checks the hashed authentication data.
--- If you want to provide access to anybody, use @(\_ -> return True)@.
-type Authenticate = Credentials -> IO Bool
 
 -- |
 -- Either a plain ASCII password or an encoding of some data, 
@@ -56,11 +41,36 @@ data Failure =
 -- If you don't want excessive requests, just make it a couple of minutes.
 type Timeout = Int
 
--- Generate actions.
-makeFree ''HandshakeF
+
+-----------------------------
 
 version :: ProtocolVersion
 version = 1
+
+
+-- Handshake
+-----------------------------
+
+type Handshake = Free HandshakeF
+
+data HandshakeF n =
+  GetAvailable (Bool -> n) |
+  GetClientProtocolVersion (ProtocolVersion -> n) |
+  GetServerProtocolVersion (ProtocolVersion -> n) |
+  GetClientUserProtocolVersion (UserProtocolVersion -> n) |
+  GetServerUserProtocolVersion (UserProtocolVersion -> n) |
+  GetCredentials (Credentials -> n) |
+  Authenticate Credentials (Bool -> n) |
+  GetTimeout (Timeout -> n)
+  deriving (Functor)
+
+-- Generate actions.
+makeFree ''HandshakeF
+
+-- | 
+-- A function, which checks the hashed authentication data.
+-- If you want to provide access to anybody, use @(\_ -> return True)@.
+type Authenticate = Credentials -> IO Bool
 
 runServerSide ::
   (MonadIO m, Applicative m) =>
