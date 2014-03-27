@@ -17,6 +17,7 @@ module MessagingService.Util.Prelude
     microsToDiff,
     diffToMillis,
     diffToMicros,
+    bracketEitherT,
   )
   where
 
@@ -67,6 +68,12 @@ import Control.Monad.Reader as Exports hiding (mapM_, sequence_, forM_, msum, ma
 import Control.Monad.Writer as Exports hiding (mapM_, sequence_, forM_, msum, mapM, sequence, forM, Any)
 import Control.Monad.Trans as Exports
 import Control.Monad.Error as Exports hiding (mapM_, sequence_, forM_, msum, mapM, sequence, forM)
+
+-- transformers-base
+import Control.Monad.Base as Exports
+
+-- monad-control
+import Control.Monad.Trans.Control as Exports
 
 -- errors
 import Control.Error as Exports hiding ((?:))
@@ -173,3 +180,16 @@ millisToDiff = (*(10^9)) >>> fromIntegral
 microsToDiff = (*(10^6)) >>> fromIntegral
 diffToMillis = realToFrac >>> (*(10^3)) >>> round
 diffToMicros = realToFrac >>> (*(10^6)) >>> round
+
+bracketEitherT :: 
+  (Monad m) => 
+  EitherT e m a -> 
+  (a -> EitherT e m b) -> 
+  (a -> EitherT e m c) -> 
+  EitherT e m c
+bracketEitherT acquire release apply = do
+  r <- acquire
+  z <- lift $ runEitherT $ apply r
+  release r
+  hoistEither z
+

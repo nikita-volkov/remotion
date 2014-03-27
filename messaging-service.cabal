@@ -46,10 +46,11 @@ library
   hs-source-dirs:
     library
   other-modules:
+    MessagingService.Client.InteractionT
     MessagingService.Protocol
     MessagingService.Session.Interaction
     MessagingService.Session.Handshake
-    MessagingService.ConnectionT
+    MessagingService.Session
     MessagingService.Util.Forking
     -- MessagingService.Server.Session
     MessagingService.Util.IOBuffer
@@ -57,6 +58,7 @@ library
     MessagingService.Util.Prelude
   exposed-modules:
     -- MessagingService.Server
+    MessagingService.Client
   build-depends:
     -- streaming:
     pipes >= 4.0 && < 4.2,
@@ -73,6 +75,7 @@ library
     system-fileio,
     system-filepath,
     -- concurrency:
+    lifted-async == 0.1.*,
     async == 2.0.*,
     concurrent-extra == 0.7.*,
     stm,
@@ -84,6 +87,8 @@ library
     text,
     bytestring,
     -- control:
+    transformers-base == 0.4.*,
+    monad-control == 0.3.*,
     free == 4.*,
     loch-th == 0.2.*,
     placeholders == 0.1.*,

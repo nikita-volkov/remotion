@@ -3,7 +3,7 @@ module MessagingService.Session.Handshake where
 import MessagingService.Util.Prelude hiding (State)
 import Control.Monad.Free
 import Control.Monad.Free.TH
-import qualified MessagingService.ConnectionT as C
+import qualified MessagingService.Session as S
 
 
 type Handshake = Free HandshakeF
@@ -19,7 +19,13 @@ data HandshakeF n =
   GetTimeout (Timeout -> n)
   deriving (Functor)
 
+-- |
+-- A version of the internal protocol of \"messaging-service\"
+-- used for checking of server-client match.
 type ProtocolVersion = Int
+-- |
+-- A user-supplied version of user's protocol
+-- used for checking of server-client match.
 type UserProtocolVersion = Int
 
 -- | 
@@ -42,8 +48,7 @@ data Failure =
   ProtocolVersionMismatch ProtocolVersion ProtocolVersion |
   UserProtocolVersionMismatch UserProtocolVersion UserProtocolVersion |
   Unauthenticated
-
-type Info = (Timeout)
+  deriving (Show)
 
 -- |
 -- A session timeout in microseconds. 
@@ -63,20 +68,20 @@ runServerSide ::
   Authenticate ->
   Timeout ->
   Handshake a ->
-  C.ConnectionT m a
+  S.SessionT m a
 runServerSide available authenticate timeout = \case
   Free free -> case free of
     GetAvailable c -> do
-      C.send available
+      S.send available
       continue $ c available
-    GetClientProtocolVersion c -> C.receive >>= continue . c
+    GetClientProtocolVersion c -> S.receive >>= continue . c
     -- ...
     Authenticate credentials c -> do
       ok <- liftIO $ authenticate $ credentials
-      C.send ok
+      S.send ok
       continue $ c ok
     GetTimeout c -> do
-      C.send timeout
+      S.send timeout
       continue $ c timeout
   Pure a -> pure a
   where
@@ -87,22 +92,22 @@ runClientSide ::
   UserProtocolVersion ->
   Credentials ->
   Handshake a ->
-  C.ConnectionT m a
+  S.SessionT m a
 runClientSide userVersion credentials = \case
   Free free -> case free of
-    GetAvailable c -> C.receive >>= continue . c
-    GetClientProtocolVersion c -> C.send version >> pure version >>= continue . c
-    GetServerProtocolVersion c -> C.receive >>= continue . c
-    GetClientUserProtocolVersion c -> C.send userVersion >> continue (c userVersion)
-    GetServerUserProtocolVersion c -> C.receive >>= continue . c
-    GetCredentials c -> C.send credentials >> continue (c credentials)
-    Authenticate credentials c -> C.receive >>= continue . c
-    GetTimeout c -> C.receive >>= continue . c
+    GetAvailable c -> S.receive >>= continue . c
+    GetClientProtocolVersion c -> S.send version >> pure version >>= continue . c
+    GetServerProtocolVersion c -> S.receive >>= continue . c
+    GetClientUserProtocolVersion c -> S.send userVersion >> continue (c userVersion)
+    GetServerUserProtocolVersion c -> S.receive >>= continue . c
+    GetCredentials c -> S.send credentials >> continue (c credentials)
+    Authenticate credentials c -> S.receive >>= continue . c
+    GetTimeout c -> S.receive >>= continue . c
   Pure a -> return a
   where
     continue = runClientSide userVersion credentials
   
-standard :: Handshake (Either Failure Info)
+standard :: Handshake (Either Failure Timeout)
 standard = runEitherT $ do
   do 
     available <- lift $ getAvailable
