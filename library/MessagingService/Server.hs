@@ -13,10 +13,12 @@ module MessagingService.Server
     C.ProcessUserRequest,
     C.State,
     -- * Control
-    Server,
-    start,
-    stop,
-    startAndBlock,
+    -- ** Monad-transformer
+    ServeT,
+    runServeT,
+    wait,
+    -- ** Simple
+    runAndWait,
   )
   where
 
@@ -29,13 +31,6 @@ import qualified Network
 import qualified Data.Set as Set
 
 
--- | The Server handle.
-data Server = Server {
-  -- | Wait for the server to either due to an error or after 'stop' is called on it.
-  wait :: IO (),
-  -- | Shut the server down, while releasing all resources.
-  stop :: IO ()
-}
 
 -- | Settings of how to run the server.
 type Settings i o s = 
@@ -70,21 +65,29 @@ type MaxClients = Int
 -- @(Data.Text.IO.'Data.Text.IO.putStrLn' . (\"MessagingService.Server: \" `<>`))@.
 type Log = Text -> IO ()
 
+-- |
+-- A monad transformer, which runs the server in the background.
+newtype ServeT m a = 
+  ServeT { unServeT :: ReaderT Wait m a }
+  deriving (Functor, Applicative, Monad, MonadIO)
 
--- | 
--- Start a server with the provided settings on a separate thread and
--- return a handle to it, which can be used to stop it gracefully.
-start :: (Serializable IO i, Serializable IO o) => Settings i o s -> IO Server
-start (userVersion, listeningMode, timeout, maxClients, log, processRequest) = do
+type Wait = IO ()
+
+-- |
+-- Run the server, while automatically managing all related resources.
+runServeT :: 
+  (Serializable IO i, Serializable IO o, MonadIO m) => 
+  Settings i o s -> ServeT m a -> m a
+runServeT (userVersion, listeningMode, timeout, maxClients, log, processRequest) m = do
 
   let (portID, auth) = case listeningMode of
         Host port auth -> (Network.PortNumber $ fromIntegral port, auth)
         Socket path -> (Network.UnixSocket $ FS.encodeString path, const $ pure True)
 
-  listeningSocket <- Network.listenOn portID
+  listeningSocket <- liftIO $ Network.listenOn portID
 
-  slotsVar <- newMVar maxClients
-  sessionThreadsVar <- newMVar Set.empty
+  slotsVar <- liftIO $ newMVar maxClients
+  sessionThreadsVar <- liftIO $ newMVar Set.empty
 
   let 
     listen = forever $ modifyMVar_ slotsVar $ \slots -> do
@@ -115,13 +118,18 @@ start (userVersion, listeningMode, timeout, maxClients, log, processRequest) = d
       takeMVar sessionThreadsVar >>= mapM_ F.killThread
       Network.sClose listeningSocket
 
-  (listenThread, listenWait) <- F.forkRethrowingFinallyWithWait cleanUp listen
-  return $ 
-    let stop = F.killThread listenThread
-        wait = void listenWait
-        in Server wait stop
+  (listenThread, listenWait) <- liftIO $ F.forkRethrowingFinallyWithWait cleanUp listen
+  
+  r <- unServeT m |> flip runReaderT (void $ listenWait)
+  liftIO $ F.killThread listenThread
+  return r
+  
+
+-- | Wait for the server to stop either due to an error or after 'stop' is called on it.
+wait :: (MonadIO m) => ServeT m ()
+wait = ServeT $ ask >>= liftIO
 
 -- |
 -- Run the server, while blocking the calling thread.
-startAndBlock :: (Serializable IO i, Serializable IO o) => Settings i o s -> IO ()
-startAndBlock settings = bracket (start settings) stop wait
+runAndWait :: (Serializable IO i, Serializable IO o) => Settings i o s -> IO ()
+runAndWait settings = runServeT settings $ wait
