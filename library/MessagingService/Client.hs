@@ -5,11 +5,11 @@ module MessagingService.Client (
   runConnectionT,
   Settings(..),
   URL(..),
-  Handshake.Credentials(..),
-  Handshake.UserProtocolVersion,
+  Protocol.Credentials(..),
+  Protocol.UserProtocolVersion,
   -- ** Failure
   Failure(..),
-  Handshake.ProtocolVersion,
+  Protocol.ProtocolVersion,
   -- ** Interaction
   request,
 )
@@ -19,9 +19,9 @@ where
 import MessagingService.Util.Prelude hiding (State, listen, interact)
 import qualified MessagingService.Util.Prelude as Prelude
 import qualified MessagingService.SessionT as S
-import qualified MessagingService.Protocol.Handshake as Handshake
-import qualified MessagingService.Protocol.Interaction as Interaction
+import qualified MessagingService.Protocol as Protocol
 import qualified MessagingService.Client.InteractionT as I
+import qualified MessagingService.Client.Sessions as Sessions
 import qualified Control.Concurrent.Async.Lifted as A
 import qualified Control.Concurrent.Lock as Lock
 import qualified Network
@@ -42,11 +42,11 @@ type KeepaliveState = MVar (Maybe UTCTime)
 
 type Timeout = Int
 
-type InteractionT i o = I.InteractionT (Interaction.Request i) (Interaction.Response o)
+type InteractionT i o = I.InteractionT (Protocol.Request i) (Protocol.Response o)
 
 -- |
 -- Settings of 'ConnectionT'.
-type Settings = (URL, Handshake.Credentials, Handshake.UserProtocolVersion)
+type Settings = (URL, Protocol.Credentials, Protocol.UserProtocolVersion)
 
 -- |
 -- Location of the server.
@@ -54,7 +54,7 @@ data URL =
   -- | Path to the socket-file.
   Socket FilePath |
   -- | Host name, port and credentials.
-  Host Text Int Handshake.Credentials
+  Host Text Int Protocol.Credentials
 
 data Failure = 
   -- |
@@ -62,10 +62,10 @@ data Failure =
   UnreachableURL |
   -- |
   -- A failure during the handshake phase.
-  HandshakeFailure Handshake.Failure | 
+  HandshakeFailure Protocol.HandshakeFailure | 
   -- |
   -- A server-side failure concerning this connection.
-  InteractionFailure Interaction.FailureResponse | 
+  InteractionFailure Protocol.FailureResponse | 
   -- |
   -- A client-side failure related to connection bookkeeping.
   SessionFailure S.Failure
@@ -118,7 +118,7 @@ runConnectionT (url, credentials, userProtocolVersion) t =
       hoistEither . fmapL SessionFailure >>= 
       hoistEither . fmapL HandshakeFailure
       where
-        session = Handshake.runClientSide userProtocolVersion credentials Handshake.standard
+        session = Sessions.handshake credentials userProtocolVersion
         settings = (socket, 10^6*1)
 
     runInteraction socket timeout = do
@@ -181,7 +181,7 @@ resetKeepalive = do
 
 interact :: 
   (Serializable IO o, Serializable IO i, MonadIO m, Applicative m) =>
-  Interaction.Request i -> ConnectionT i o m (Maybe o)
+  Protocol.Request i -> ConnectionT i o m (Maybe o)
 interact = 
   I.interact >>> lift >>> lift >>> ConnectionT >=> 
   either (throwError . InteractionFailure) return
@@ -190,7 +190,7 @@ checkIn ::
   (Serializable IO i, Serializable IO o, MonadIO m, Applicative m) => 
   ConnectionT i o m ()
 checkIn = 
-  interact Interaction.Keepalive >>= 
+  interact Protocol.Keepalive >>= 
   maybe (return ()) ($bug "Unexpected response")
 
 -- |
@@ -199,5 +199,5 @@ request ::
   (Serializable IO i, Serializable IO o, MonadIO m, Applicative m) => 
   i -> ConnectionT i o m o
 request a = 
-  interact (Interaction.UserRequest a) >>= 
+  interact (Protocol.UserRequest a) >>= 
   maybe ($bug "Unexpected response") return

@@ -46,11 +46,11 @@ library
   hs-source-dirs:
     library
   other-modules:
-    MessagingService.Server.Session
-    MessagingService.Protocol.Handshake
-    MessagingService.Protocol.Interaction
-    MessagingService.Client.InteractionT
+    MessagingService.Protocol
     MessagingService.SessionT
+    MessagingService.Server.Sessions
+    MessagingService.Client.Sessions
+    MessagingService.Client.InteractionT
     MessagingService.Util.Forking
     MessagingService.Util.IOBuffer
     MessagingService.Util.FileSystem
@@ -88,7 +88,6 @@ library
     -- control:
     transformers-base == 0.4.*,
     monad-control == 0.3.*,
-    free == 4.*,
     loch-th == 0.2.*,
     placeholders == 0.1.*,
     errors >= 1.4.4,
