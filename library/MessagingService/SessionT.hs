@@ -18,7 +18,9 @@ type Settings = (Socket, Timeout)
 type Socket = Handle
 
 -- |
--- A connection timeout in microseconds. 
+-- A connection timeout in microseconds.
+-- The period of keepalive signaling depends on that parameter.
+-- If you don't want excessive requests, just make it a couple of minutes.
 type Timeout = Int
 
 data Failure =

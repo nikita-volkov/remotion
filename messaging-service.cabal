@@ -46,12 +46,12 @@ library
   hs-source-dirs:
     library
   other-modules:
+    MessagingService.Server.Session
     MessagingService.Protocol.Handshake
     MessagingService.Protocol.Interaction
     MessagingService.Client.InteractionT
     MessagingService.SessionT
     MessagingService.Util.Forking
-    -- MessagingService.Server.Session
     MessagingService.Util.IOBuffer
     MessagingService.Util.FileSystem
     MessagingService.Util.Prelude

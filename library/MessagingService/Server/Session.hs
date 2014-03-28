@@ -1,30 +1,15 @@
 module MessagingService.Server.Session where
 
 import MessagingService.Util.Prelude hiding (State, listen, interact)
-import qualified MessagingService.ConnectionT as C
-import qualified MessagingService.Protocol.Client as PC
-import qualified MessagingService.Protocol.Server as PS
+import qualified MessagingService.SessionT as SesisonT
+import qualified MessagingService.Protocol.Interaction as Interaction
 
 
 -- | 
 -- A user session on server.
 newtype Session i o s r = 
-  Session (ReaderT (Env i o s) (C.ConnectionT (PC.Message i) (PS.Message o) IO) r)
-  deriving (Functor, Applicative, Monad, MonadIO, MonadReader (Env i o s), MonadError C.Failure)
-type Env i o s = (Settings i o s, SessionState s)
-type Settings i o s = (Timeout, Authenticate, ProcessMessage i o s)
-
--- | 
--- A function, which checks the hashed authentication data.
--- If you want to provide access to anybody, use @(\_ -> return True)@.
--- 
--- An argument value of @Nothing@ means an attempt of anonymous authentication.
-type Authenticate = Maybe Credentials -> IO Bool
-
--- |
--- Either a plain ASCII password or an encoding of some data, 
--- e.g. an MD5 hash of a login-password pair or just a password.
-type Credentials = ByteString
+  Session (ReaderT (ProcessMessageWithState i o) (SesisonT.SessionT IO) r)
+  deriving (Functor, Applicative, Monad, MonadIO, MonadError SesisonT.Failure)
 
 -- | 
 -- A function which processes messages from client (@i@) and produces a response (@o@),
@@ -39,69 +24,37 @@ type ProcessMessage i o s = State s -> i -> IO o
 -- You're free to extend it with whatever the data structure you want.
 type State s = IORef (Maybe s)
 
-type SessionState s = (Authenticated, State s)
+type ProcessMessageWithState i o = i -> IO o
 
-type Authenticated = IORef Bool
+run :: 
+  (SesisonT.Settings, ProcessMessage i o s) ->
+  Session i o s r -> IO (Either SesisonT.Failure r)
+run (connectionSettings, processMessage) (Session t) = do
+  state <- liftIO $ newIORef Nothing
+  runReaderT t (processMessage state) |> flip SesisonT.run connectionSettings
 
--- |
--- A session timeout in microseconds. 
--- The period of keepalive signaling depends on that parameter.
--- If you don't want excessive requests, just make it a couple of minutes.
-type Timeout = Int
-
-run :: Session i o s r -> (C.Settings, Settings i o s) -> IO (Either C.Failure r)
-run (Session t) (connectionSettings, settings) = do
-  state <- liftIO $ (,) <$> newIORef False <*> newIORef Nothing
-  runReaderT t (settings, state) |> flip C.run connectionSettings
-
-receive :: (Serializable IO i, Serializable IO o) => Session i o s (PC.Message i)
+receive :: (Serializable IO i, Serializable IO o) => Session i o s (Interaction.Request i)
 receive = do
-  Session $ lift $ catchError C.receive $ \e -> do
+  catchError (Session $ lift SesisonT.receive) $ \e -> do
     case e of
-      C.TimeoutReached -> C.send $ PS.TimeoutReached
-      C.CorruptData t -> C.send $ PS.CorruptRequest t
+      SesisonT.TimeoutReached -> send $ Left $ Interaction.TimeoutReached
+      SesisonT.CorruptData t -> send $ Left $ Interaction.CorruptRequest t
       _ -> return ()
     throwError e
 
-send :: (Serializable IO o) => PS.Message o -> Session i o s ()
-send response = Session $ lift $ C.send response
+send :: (Serializable IO o) => Interaction.Response o -> Session i o s ()
+send response = Session $ lift $ SesisonT.send response
 
 interact :: (Serializable IO i, Serializable IO o) => Session i o s ()
 interact = do
-  ((timeout, auth, processMessage), (authenticated, state)) <- Session $ ask
-  let   
-    checkingAuthentication session = do
-      readIORef authenticated |> liftIO >>= \case
-        True -> session
-        False -> send $ PS.Unauthenticated
+  processMessage <- Session $ ask
   receive >>= \case
-    PC.Authenticate hash -> do
-      liftIO (auth hash) >>= \case
-        True -> do
-          send $ PS.Okay Nothing
-          liftIO $ writeIORef authenticated True
-          interact
-        False -> do
-          send $ PS.Unauthenticated
-    PC.CloseSession -> do
-      send $ PS.Okay Nothing
-    PC.Ping -> do
-      checkingAuthentication $ do
-        send $ PS.Okay Nothing
-        interact
-    PC.Data m -> do
-      checkingAuthentication $ do
-        reply <- liftIO $ processMessage state m
-        send $ PS.Okay $ Just reply
-        interact
-
-rejectWithTooManyConnections :: (Serializable IO o) => Session i o s ()
-rejectWithTooManyConnections = send $ PS.TooManyConnections
-
-greet :: (Serializable IO o) => Session i o s ()
-greet = do
-  ((timeout, _, _), _) <- ask
-  send $ PS.Welcome timeout
-
-standard :: (Serializable IO i, Serializable IO o) => Session i o s ()
-standard = greet >> interact
+    Interaction.CloseSession -> do
+      send $ Right $ Nothing
+    Interaction.Keepalive -> do
+      send $ Right $ Nothing
+      interact
+    Interaction.UserRequest m -> do
+      reply <- liftIO $ processMessage m
+      send $ Right $ Just reply
+      interact
