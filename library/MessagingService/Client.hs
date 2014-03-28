@@ -1,5 +1,9 @@
 {-# LANGUAGE CPP #-}
 module MessagingService.Client (
+  -- * Control
+  ConnectionT,
+  runConnectionT,
+  request,
   -- * Settings
   Settings(..),
   URL(..),
@@ -7,10 +11,6 @@ module MessagingService.Client (
   Protocol.UserProtocolVersion,
   -- * Failure
   Failure(..),
-  -- * Monad-transformer
-  ConnectionT,
-  runConnectionT,
-  request,
 )
 where
 
@@ -178,7 +178,7 @@ checkIn =
   maybe (return ()) ($bug "Unexpected response")
 
 -- |
--- Perform a custom request.
+-- Send a request @i@ and receive a response @o@.
 request :: 
   (Serializable IO i, Serializable IO o, MonadIO m, Applicative m) => 
   i -> ConnectionT i o m o

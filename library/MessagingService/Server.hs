@@ -1,5 +1,12 @@
 module MessagingService.Server
   (
+    -- * Control
+    -- ** Monad-transformer
+    ServeT,
+    runServeT,
+    wait,
+    -- ** Simple
+    runAndWait,
     -- * Settings
     Settings,
     P.UserProtocolVersion,
@@ -12,13 +19,6 @@ module MessagingService.Server
     Log,
     C.ProcessUserRequest,
     C.State,
-    -- * Control
-    -- ** Monad-transformer
-    ServeT,
-    runServeT,
-    wait,
-    -- ** Simple
-    runAndWait,
   )
   where
 
@@ -120,12 +120,15 @@ runServeT (userVersion, listeningMode, timeout, maxClients, log, processRequest)
 
   (listenThread, listenWait) <- liftIO $ F.forkRethrowingFinallyWithWait cleanUp listen
   
-  r <- unServeT m |> flip runReaderT (void $ listenWait)
-  liftIO $ F.killThread listenThread
+  let 
+    wait = void $ listenWait
+    stop = F.killThread listenThread
+  r <- unServeT m |> flip runReaderT wait
+  liftIO $ stop
   return r
   
 
--- | Wait for the server to stop either due to an error or after 'stop' is called on it.
+-- | Block until the server stops due to an error.
 wait :: (MonadIO m) => ServeT m ()
 wait = ServeT $ ask >>= liftIO
 
