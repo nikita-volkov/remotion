@@ -52,11 +52,11 @@ data Request a =
 
 instance (Serializable m a) => Serializable m (Request a)
 
-type Response a = Either FailureResponse (Maybe a)
+type Response a = Either InteractionFailure (Maybe a)
 
 -- |
 -- A failure response from server.
-data FailureResponse = 
+data InteractionFailure = 
   -- | 
   -- Server was unable to deserialize the request.
   -- This is only expected to happen in case of user's protocol mismatch.
@@ -66,7 +66,7 @@ data FailureResponse =
   TimeoutReached
   deriving (Show, Generic)
 
-instance Serializable m FailureResponse
+instance Serializable m InteractionFailure
 
 
 -----------------------------

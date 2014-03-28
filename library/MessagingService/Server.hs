@@ -2,15 +2,16 @@ module MessagingService.Server
   (
     -- * Settings
     Settings,
+    P.UserProtocolVersion,
     ListeningMode(..),
     Port,
-    Session.Authenticate,
-    Session.Credentials,
-    Session.Timeout,
+    C.Authenticate,
+    P.Credentials,
+    P.Timeout,
     MaxClients,
     Log,
-    Session.ProcessMessage,
-    Session.State,
+    C.ProcessUserRequest,
+    C.State,
     -- * Control
     Server,
     start,
@@ -20,7 +21,8 @@ module MessagingService.Server
   where
 
 import MessagingService.Util.Prelude hiding (listen)
-import qualified MessagingService.Server.Session as Session
+import qualified MessagingService.Server.Connection as C
+import qualified MessagingService.Protocol as P
 import qualified MessagingService.Util.Forking as F
 import qualified MessagingService.Util.FileSystem as FS
 import qualified Network
@@ -36,18 +38,20 @@ data Server = Server {
 }
 
 -- | Settings of how to run the server.
-type Settings i o s = (ListeningMode, Session.Timeout, MaxClients, Log, Session.ProcessMessage i o s)
+type Settings i o s = 
+  (P.UserProtocolVersion, ListeningMode, P.Timeout, MaxClients, Log, 
+   C.ProcessUserRequest i o s)
 
 -- | Defines how to listen for connections.
 data ListeningMode =
   -- | 
   -- Listen on a port with an authentication function.
-  ListeningMode_Host Port Session.Authenticate |
+  Host Port C.Authenticate |
   -- | 
   -- Listen on a socket file.
   -- Since sockets are local no authentication is needed.
   -- Works only on UNIX systems.
-  ListeningMode_Socket FilePath
+  Socket FilePath
 
 -- | A port to run the server on.
 type Port = Int
@@ -71,11 +75,11 @@ type Log = Text -> IO ()
 -- Start a server with the provided settings on a separate thread and
 -- return a handle to it, which can be used to stop it gracefully.
 start :: (Serializable IO i, Serializable IO o) => Settings i o s -> IO Server
-start (listeningMode, timeout, maxClients, log, processMessage) = do
+start (userVersion, listeningMode, timeout, maxClients, log, processRequest) = do
 
   let (portID, auth) = case listeningMode of
-        ListeningMode_Host port auth -> (Network.PortNumber $ fromIntegral port, auth)
-        ListeningMode_Socket path -> (Network.UnixSocket $ FS.encodeString path, const $ pure True)
+        Host port auth -> (Network.PortNumber $ fromIntegral port, auth)
+        Socket path -> (Network.UnixSocket $ FS.encodeString path, const $ pure True)
 
   listeningSocket <- Network.listenOn portID
 
@@ -88,37 +92,25 @@ start (listeningMode, timeout, maxClients, log, processMessage) = do
       (connectionSocket, _, _) <- Network.accept listeningSocket
       log "Client connected"
       let 
-        runSession sess settings = 
-          Session.run sess settings >>= 
-          either (liftIO . log . ("Session error: " <>) . packText . show) 
-                 (const $ return ())
+        available = slots > 0
+        forkRethrowing = F.forkRethrowingFinally $ do
+          modifyMVar_ slotsVar (return . succ)
+          hClose connectionSocket
+          unregisterThread
         registerThread = do
           tid <- F.myThreadId
           modifyMVar_ sessionThreadsVar $ return . Set.insert tid
         unregisterThread = do
           tid <- F.myThreadId
           modifyMVar_ sessionThreadsVar $ return . Set.delete tid
-      if slots <= 0
-        then do
-          let timeout = 10^6
-              settings = ((connectionSocket, timeout), (timeout, auth, processMessage))
-              forkRethrowing = F.forkRethrowingFinally $ do
-                hClose connectionSocket
-                unregisterThread
+        runConnection =
+          C.runConnection connectionSocket available auth timeout userVersion processRequest >>=
+          either (liftIO . log . ("Session error: " <>) . packText . show) (const $ return ())
+        in 
           forkRethrowing $ do
             registerThread
-            runSession Session.rejectWithTooManyConnections settings
-          return slots
-        else do
-          let settings = ((connectionSocket, timeout), (timeout, auth, processMessage))
-              forkRethrowing = F.forkRethrowingFinally $ do
-                modifyMVar_ slotsVar (return . succ)
-                hClose connectionSocket
-                unregisterThread
-          forkRethrowing $ do
-            registerThread
-            runSession Session.standard settings
-          return $ slots - 1
+            runConnection
+      return $ slots - 1
     cleanUp = do
       takeMVar sessionThreadsVar >>= mapM_ F.killThread
       Network.sClose listeningSocket

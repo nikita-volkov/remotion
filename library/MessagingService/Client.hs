@@ -65,7 +65,7 @@ data Failure =
   HandshakeFailure Protocol.HandshakeFailure | 
   -- |
   -- A server-side failure concerning this connection.
-  InteractionFailure Protocol.FailureResponse | 
+  InteractionFailure Protocol.InteractionFailure | 
   -- |
   -- A client-side failure related to connection bookkeeping.
   SessionFailure S.Failure

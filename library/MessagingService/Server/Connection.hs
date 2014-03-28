@@ -1,8 +1,31 @@
-module MessagingService.Server.Sessions where
+module MessagingService.Server.Connection where
 
 import MessagingService.Util.Prelude hiding (State, listen, interact)
 import qualified MessagingService.Protocol as P
 import qualified MessagingService.SessionT as S
+
+
+runConnection :: 
+  (MonadIO m, Applicative m, Serializable IO i, Serializable IO o) =>
+  S.Socket ->
+  ServerIsAvailable ->
+  Authenticate ->
+  P.Timeout ->
+  P.UserProtocolVersion ->
+  ProcessUserRequest i o s -> 
+  m (Either ConnectionFailure ())
+runConnection socket available authenticate timeout userVersion processRequest = runEitherT $ do
+  do 
+    r <- lift $ S.run (handshake available authenticate timeout userVersion) (socket, 10^6*3) 
+    hoistEither $ join . liftM (fmapL HandshakeFailure) $ fmapL SessionFailure r
+  do
+    r <- lift $ S.run (interact processRequest) (socket, timeout)
+    hoistEither $ fmapL SessionFailure r
+
+data ConnectionFailure = 
+  HandshakeFailure P.HandshakeFailure |
+  SessionFailure S.Failure
+  deriving (Show)
 
 
 -- Handshake

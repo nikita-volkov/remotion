@@ -48,7 +48,7 @@ library
   other-modules:
     MessagingService.Protocol
     MessagingService.SessionT
-    MessagingService.Server.Sessions
+    MessagingService.Server.Connection
     MessagingService.Client.Sessions
     MessagingService.Client.InteractionT
     MessagingService.Util.Forking
@@ -56,7 +56,7 @@ library
     MessagingService.Util.FileSystem
     MessagingService.Util.Prelude
   exposed-modules:
-    -- MessagingService.Server
+    MessagingService.Server
     MessagingService.Client
   build-depends:
     -- streaming:
