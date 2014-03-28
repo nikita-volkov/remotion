@@ -1,8 +1,8 @@
-module MessagingService.Client.Sessions where
+module Remotion.Client.Sessions where
 
-import MessagingService.Util.Prelude
-import qualified MessagingService.SessionT as S
-import qualified MessagingService.Protocol as P
+import Remotion.Util.Prelude
+import qualified Remotion.SessionT as S
+import qualified Remotion.Protocol as P
 
 
 handshake ::

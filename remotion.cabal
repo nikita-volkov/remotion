@@ -1,5 +1,5 @@
 name:
-  messaging-service
+  remotion
 version:
   0.1.0
 synopsis:
@@ -16,9 +16,9 @@ description:
 category:
   Network, Service
 homepage:
-  https://github.com/nikita-volkov/messaging-service 
+  https://github.com/nikita-volkov/remotion 
 bug-reports:
-  https://github.com/nikita-volkov/messaging-service/issues 
+  https://github.com/nikita-volkov/remotion/issues 
 author:
   Nikita Volkov <nikita.y.volkov@mail.ru>
 maintainer:
@@ -39,25 +39,25 @@ source-repository head
   type:
     git
   location:
-    git://github.com/nikita-volkov/messaging-service.git
+    git://github.com/nikita-volkov/remotion.git
 
 
 library
   hs-source-dirs:
     library
   other-modules:
-    MessagingService.Protocol
-    MessagingService.SessionT
-    MessagingService.Server.Connection
-    MessagingService.Client.Sessions
-    MessagingService.Client.InteractionT
-    MessagingService.Util.Forking
-    MessagingService.Util.IOBuffer
-    MessagingService.Util.FileSystem
-    MessagingService.Util.Prelude
+    Remotion.Protocol
+    Remotion.SessionT
+    Remotion.Server.Connection
+    Remotion.Client.Sessions
+    Remotion.Client.InteractionT
+    Remotion.Util.Forking
+    Remotion.Util.IOBuffer
+    Remotion.Util.FileSystem
+    Remotion.Util.Prelude
   exposed-modules:
-    MessagingService.Server
-    MessagingService.Client
+    Remotion.Server
+    Remotion.Client
   build-depends:
     -- streaming:
     pipes >= 4.0 && < 4.2,

@@ -1,6 +1,6 @@
-module MessagingService.SessionT where
+module Remotion.SessionT where
 
-import MessagingService.Util.Prelude
+import Remotion.Util.Prelude
 import qualified Network.Socket
 import qualified Pipes.ByteString as PipesByteString
 import qualified Pipes.Prelude as PipesPrelude

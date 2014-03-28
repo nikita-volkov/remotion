@@ -1,4 +1,4 @@
-module MessagingService.Server
+module Remotion.Server
   (
     -- * Control
     -- ** Monad-transformer
@@ -22,11 +22,11 @@ module MessagingService.Server
   )
   where
 
-import MessagingService.Util.Prelude hiding (listen)
-import qualified MessagingService.Server.Connection as C
-import qualified MessagingService.Protocol as P
-import qualified MessagingService.Util.Forking as F
-import qualified MessagingService.Util.FileSystem as FS
+import Remotion.Util.Prelude hiding (listen)
+import qualified Remotion.Server.Connection as C
+import qualified Remotion.Protocol as P
+import qualified Remotion.Util.Forking as F
+import qualified Remotion.Util.FileSystem as FS
 import qualified Network
 import qualified Data.Set as Set
 
@@ -62,7 +62,7 @@ type MaxClients = Int
 -- which is a fancy way of alternatively saying @(\\_ -> return ())@.
 -- If you want to output to console use @Data.Text.IO.'Data.Text.IO.putStrLn'@.
 -- If you want to somehow reformat the output, you're welcome: 
--- @(Data.Text.IO.'Data.Text.IO.putStrLn' . (\"MessagingService.Server: \" `<>`))@.
+-- @(Data.Text.IO.'Data.Text.IO.putStrLn' . (\"Remotion.Server: \" `<>`))@.
 type Log = Text -> IO ()
 
 -- |

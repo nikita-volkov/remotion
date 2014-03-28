@@ -1,5 +1,5 @@
 {-# LANGUAGE MagicHash, UnboxedTuples #-}
-module MessagingService.Util.Forking 
+module Remotion.Util.Forking 
   (
     forkRethrowingFinally,
     forkRethrowingFinallyWithWait,
@@ -9,7 +9,7 @@ module MessagingService.Util.Forking
   )
   where
 
-import MessagingService.Util.Prelude
+import Remotion.Util.Prelude
 import Control.Concurrent
 import qualified GHC.IO as GHC
 import qualified GHC.Conc as GHC

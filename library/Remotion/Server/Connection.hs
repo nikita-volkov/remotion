@@ -1,8 +1,8 @@
-module MessagingService.Server.Connection where
+module Remotion.Server.Connection where
 
-import MessagingService.Util.Prelude hiding (State, listen, interact)
-import qualified MessagingService.Protocol as P
-import qualified MessagingService.SessionT as S
+import Remotion.Util.Prelude hiding (State, listen, interact)
+import qualified Remotion.Protocol as P
+import qualified Remotion.SessionT as S
 
 
 runConnection :: 

@@ -1,7 +1,7 @@
 -- |
 -- Utilities for dealing with 'FilePath'.
 -- 
-module MessagingService.Util.FileSystem
+module Remotion.Util.FileSystem
   ( 
     module Filesystem,
     module Filesystem.Path.CurrentOS,
@@ -23,7 +23,7 @@ module MessagingService.Util.FileSystem
   )
   where
 
-import MessagingService.Util.Prelude hiding (stripPrefix, last)
+import Remotion.Util.Prelude hiding (stripPrefix, last)
 import Filesystem.Path.CurrentOS
 import Filesystem
 import qualified System.Directory as Directory

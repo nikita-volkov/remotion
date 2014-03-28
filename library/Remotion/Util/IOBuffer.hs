@@ -1,4 +1,4 @@
-module MessagingService.Util.IOBuffer 
+module Remotion.Util.IOBuffer 
   (
     IOBuffer, 
     start, 
@@ -7,7 +7,7 @@ module MessagingService.Util.IOBuffer
   )
   where
 
-import MessagingService.Util.Prelude
+import Remotion.Util.Prelude
 import qualified Control.Concurrent.Async as Async
 
 data IOBuffer = IOBuffer {

@@ -1,5 +1,5 @@
 {-# LANGUAGE CPP #-}
-module MessagingService.Client (
+module Remotion.Client (
   -- * Control
   ConnectionT,
   runConnectionT,
@@ -15,16 +15,16 @@ module MessagingService.Client (
 where
 
 
-import MessagingService.Util.Prelude hiding (State, listen, interact)
-import qualified MessagingService.Util.Prelude as Prelude
-import qualified MessagingService.SessionT as S
-import qualified MessagingService.Protocol as Protocol
-import qualified MessagingService.Client.InteractionT as I
-import qualified MessagingService.Client.Sessions as Sessions
+import Remotion.Util.Prelude hiding (State, listen, interact)
+import qualified Remotion.Util.Prelude as Prelude
+import qualified Remotion.SessionT as S
+import qualified Remotion.Protocol as Protocol
+import qualified Remotion.Client.InteractionT as I
+import qualified Remotion.Client.Sessions as Sessions
 import qualified Control.Concurrent.Async.Lifted as A
 import qualified Control.Concurrent.Lock as Lock
 import qualified Network
-import qualified MessagingService.Util.FileSystem as FS
+import qualified Remotion.Util.FileSystem as FS
 
 -- |
 -- A monad transformer for performing actions on client-side.

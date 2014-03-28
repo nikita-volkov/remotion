@@ -1,6 +1,6 @@
-module MessagingService.Protocol where
+module Remotion.Protocol where
 
-import MessagingService.Util.Prelude
+import Remotion.Util.Prelude
 
 
 -- Handshake

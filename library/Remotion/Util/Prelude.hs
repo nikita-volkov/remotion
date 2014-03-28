@@ -1,4 +1,4 @@
-module MessagingService.Util.Prelude 
+module Remotion.Util.Prelude 
   ( 
     module Exports,
 
@@ -158,7 +158,7 @@ unpackText = Data.Text.unpack
 
 bug = [e| $failure . (msg <>) . Data.Text.unpack |]
   where
-    msg = "A \"messaging-service\" package bug: " :: String
+    msg = "A \"remotion\" package bug: " :: String
 
 (|>) :: a -> (a -> b) -> b
 a |> aToB = aToB a
