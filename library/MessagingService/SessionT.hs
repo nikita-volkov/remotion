@@ -8,7 +8,9 @@ import qualified System.Timeout as Timeout
 import qualified Control.Exception as Ex
 
 
--- | A connection, which can be used in both the server and the client.
+-- | 
+-- An abstraction over networking and data transmission.
+-- Can be used in implementation of both the server and the client.
 newtype SessionT m r = 
   SessionT { unSessionT :: ReaderT Settings (EitherT Failure m) r }
   deriving (Functor, Applicative, Monad, MonadIO, MonadReader Settings, MonadError Failure)
