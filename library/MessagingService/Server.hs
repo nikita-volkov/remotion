@@ -1,115 +1,60 @@
 module MessagingService.Server
   (
-    start,
+    -- * Control
+    -- ** Monad-transformer
+    ServeT,
+    runServeT,
+    wait,
+    -- ** Simple
+    runAndWait,
+    -- * Settings
     Settings,
+    P.UserProtocolVersion,
     ListeningMode(..),
     Port,
-    Session.Authenticate,
-    Session.Hash,
-    Session.Timeout,
+    C.Authenticate,
+    P.Credentials,
+    P.Timeout,
+    MaxClients,
     Log,
-    Session.ProcessMessage,
-    Session.State,
+    C.ProcessUserRequest,
+    C.State,
   )
   where
 
 import MessagingService.Util.Prelude hiding (listen)
-import qualified MessagingService.Server.Session as Session
+import qualified MessagingService.Server.Connection as C
+import qualified MessagingService.Protocol as P
+import qualified MessagingService.Util.Forking as F
 import qualified MessagingService.Util.FileSystem as FS
 import qualified Network
-import qualified Network.Socket
+import qualified Data.Set as Set
 
 
--- | 
--- Start the server with the provided settings and
--- return a handle to its thread, which can later be used to stop it,
--- or block until it raises any exception (which really should not be).
--- 
--- Here is an example of how you can run and stop your server: 
--- 
--- @
--- import CIO
--- import qualified MessagingService.Server as Server
--- main = do
---   runCIO 100 $ do
---     let settings = ...
---     -- Run the server asynchronously
---     serverFork <- Server.start settings
---     -- This is how we can stop the server:
---     let stopServer = killCIO serverFork
---     ...
---     -- This is how we can block until the \"serverFork\" thread finishes either
---     -- by means of \"stopServer\" or an exception get thrown.
---     -- In case of exceptions \"waitCIO\" rethrows them in the current thread.
---     waitCIO serverFork
--- @
--- 
--- In the above example we've set the maximum number of concurrent threads to 100.
--- The amount of connections your server handles directly depends on that parameter.
--- All the exceeding connections get put on a wait list.
--- It must also be mentioned that using "killCIO" to stop servers is safe,
--- and all the resources get released.
--- 
--- Why the `CIO` monad? Because composition, that's why!
--- 
--- * You can run multiple servers with a shared thread pool,
--- meaning a shared connection pool. 
--- 
--- * You can compose them with whatever other concurrent things you do, 
--- but still share a thread pool.
--- 
--- * You can kill groups of servers and other concurrent things, e.g.:
--- 
--- @
--- main = do
---   ...
---   -- Everything inside that block shares a pool of a hundred threads.
---   runCIO 100 $ do
---     groupFork <- forkCIO $ do
---       Server.start server1Settings
---       Server.start server2Settings
---       ... -- whatever you like
---     let killThemAll = killCIO groupFork
---     ...
--- @
--- 
-start :: (Serializable IO i, Serializable IO o) => Settings i o s -> CIO (ForkCIO ())
-start (listeningMode, timeout, log, processMessage) = do
-
-  let (portID, auth) = case listeningMode of
-        ListeningMode_Host port auth -> (Network.PortNumber $ fromIntegral port, auth)
-        ListeningMode_Socket path -> (Network.UnixSocket $ FS.encodeString path, const $ pure True)
-
-  listeningSocket <- liftIO $ Network.listenOn portID
-
-  let onDeath = liftIO $ Network.sClose listeningSocket
-  forkOnDeathCIO onDeath $ do
-    forever $ do
-      liftIO $ log "Listening"
-      (connectionSocket, _) <- liftIO $ Network.Socket.accept listeningSocket
-      liftIO $ log "Client connected"
-      let onDeath = liftIO $ Network.sClose connectionSocket
-      forkOnDeathCIO onDeath $ do
-        let settings = (connectionSocket, timeout, auth, processMessage)
-        ei <- liftIO $ runEitherT $ Session.run Session.interact settings
-        either (liftIO . log . ("Session error: " <>)) (const $ return ()) ei
 
 -- | Settings of how to run the server.
-type Settings i o s = (ListeningMode, Session.Timeout, Log, Session.ProcessMessage i o s)
+type Settings i o s = 
+  (P.UserProtocolVersion, ListeningMode, P.Timeout, MaxClients, Log, 
+   C.ProcessUserRequest i o s)
 
 -- | Defines how to listen for connections.
 data ListeningMode =
   -- | 
   -- Listen on a port with an authentication function.
-  ListeningMode_Host Port Session.Authenticate |
+  Host Port C.Authenticate |
   -- | 
   -- Listen on a socket file.
   -- Since sockets are local no authentication is needed.
   -- Works only on UNIX systems.
-  ListeningMode_Socket FilePath
+  Socket FilePath
 
 -- | A port to run the server on.
 type Port = Int
+
+-- | 
+-- A maximum amount of clients.
+-- When this amount is reached the server rejects all the further connections.
+type MaxClients = Int
 
 -- |
 -- A logging function.
@@ -119,3 +64,75 @@ type Port = Int
 -- If you want to somehow reformat the output, you're welcome: 
 -- @(Data.Text.IO.'Data.Text.IO.putStrLn' . (\"MessagingService.Server: \" `<>`))@.
 type Log = Text -> IO ()
+
+-- |
+-- A monad transformer, which runs the server in the background.
+newtype ServeT m a = 
+  ServeT { unServeT :: ReaderT Wait m a }
+  deriving (Functor, Applicative, Monad, MonadIO)
+
+type Wait = IO ()
+
+-- |
+-- Run the server, while automatically managing all related resources.
+runServeT :: 
+  (Serializable IO i, Serializable IO o, MonadIO m) => 
+  Settings i o s -> ServeT m a -> m a
+runServeT (userVersion, listeningMode, timeout, maxClients, log, processRequest) m = do
+
+  let (portID, auth) = case listeningMode of
+        Host port auth -> (Network.PortNumber $ fromIntegral port, auth)
+        Socket path -> (Network.UnixSocket $ FS.encodeString path, const $ pure True)
+
+  listeningSocket <- liftIO $ Network.listenOn portID
+
+  slotsVar <- liftIO $ newMVar maxClients
+  sessionThreadsVar <- liftIO $ newMVar Set.empty
+
+  let 
+    listen = forever $ modifyMVar_ slotsVar $ \slots -> do
+      log "Listening"
+      (connectionSocket, _, _) <- Network.accept listeningSocket
+      log "Client connected"
+      let 
+        available = slots > 0
+        forkRethrowing = F.forkRethrowingFinally $ do
+          modifyMVar_ slotsVar (return . succ)
+          hClose connectionSocket
+          unregisterThread
+        registerThread = do
+          tid <- F.myThreadId
+          modifyMVar_ sessionThreadsVar $ return . Set.insert tid
+        unregisterThread = do
+          tid <- F.myThreadId
+          modifyMVar_ sessionThreadsVar $ return . Set.delete tid
+        runConnection =
+          C.runConnection connectionSocket available auth timeout userVersion processRequest >>=
+          either (liftIO . log . ("Session error: " <>) . packText . show) (const $ return ())
+        in 
+          forkRethrowing $ do
+            registerThread
+            runConnection
+      return $ slots - 1
+    cleanUp = do
+      takeMVar sessionThreadsVar >>= mapM_ F.killThread
+      Network.sClose listeningSocket
+
+  (listenThread, listenWait) <- liftIO $ F.forkRethrowingFinallyWithWait cleanUp listen
+  
+  let 
+    wait = void $ listenWait
+    stop = F.killThread listenThread
+  r <- unServeT m |> flip runReaderT wait
+  liftIO $ stop
+  return r
+  
+
+-- | Block until the server stops due to an error.
+wait :: (MonadIO m) => ServeT m ()
+wait = ServeT $ ask >>= liftIO
+
+-- |
+-- Run the server, while blocking the calling thread.
+runAndWait :: (Serializable IO i, Serializable IO o) => Settings i o s -> IO ()
+runAndWait settings = runServeT settings $ wait

@@ -3,11 +3,12 @@ name:
 version:
   0.1.0
 synopsis:
-  A minimalistic library for implementing client-server remote services
+  A library for client-server applications based on custom protocols
 description:
-  Provides an API abstracting over the typical tasks of client-server communication.
-  It automates the authentication process and keeping of the connection alive.
-  The user can implement protocols of any form based on messaging.
+  An API abstracting over the typical tasks of client-server communication.
+  It automates the authentication process, failure management and 
+  the task of keeping the connections alive.
+  The user can implement protocols of any form based on it.
 
   Useful for writing all kinds of services. 
   E.g., the <http://hackage.haskell.org/package/graph-db graph-db> 
@@ -45,12 +46,18 @@ library
   hs-source-dirs:
     library
   other-modules:
-    MessagingService.Server.Session
     MessagingService.Protocol
+    MessagingService.SessionT
+    MessagingService.Server.Connection
+    MessagingService.Client.Sessions
+    MessagingService.Client.InteractionT
+    MessagingService.Util.Forking
+    MessagingService.Util.IOBuffer
     MessagingService.Util.FileSystem
     MessagingService.Util.Prelude
   exposed-modules:
     MessagingService.Server
+    MessagingService.Client
   build-depends:
     -- streaming:
     pipes >= 4.0 && < 4.2,
@@ -67,7 +74,8 @@ library
     system-fileio,
     system-filepath,
     -- concurrency:
-    cio == 0.2.*,
+    lifted-async == 0.1.*,
+    async == 2.0.*,
     concurrent-extra == 0.7.*,
     stm,
     -- data:
@@ -78,6 +86,8 @@ library
     text,
     bytestring,
     -- control:
+    transformers-base == 0.4.*,
+    monad-control == 0.3.*,
     loch-th == 0.2.*,
     placeholders == 0.1.*,
     errors >= 1.4.4,
@@ -110,6 +120,7 @@ library
     QuasiQuotes
     DeriveDataTypeable
     GeneralizedNewtypeDeriving
+    DeriveFunctor
     RecordWildCards
     MultiWayIf
     LiberalTypeSynonyms
