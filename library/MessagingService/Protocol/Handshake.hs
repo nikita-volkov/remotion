@@ -67,6 +67,10 @@ data HandshakeF n =
 -- Generate actions.
 makeFree ''HandshakeF
 
+-- |
+-- 
+type ServerIsAvailable = Bool
+
 -- | 
 -- A function, which checks the hashed authentication data.
 -- If you want to provide access to anybody, use @(\_ -> return True)@.
@@ -74,7 +78,7 @@ type Authenticate = Credentials -> IO Bool
 
 runServerSide ::
   (MonadIO m, Applicative m) =>
-  Bool ->
+  ServerIsAvailable ->
   Authenticate ->
   Timeout ->
   Handshake a ->
