@@ -1,16 +1,15 @@
 {-# LANGUAGE CPP #-}
 module MessagingService.Client (
-  ConnectionT,
-  -- ** Execution and Configuration
-  runConnectionT,
+  -- * Settings
   Settings(..),
   URL(..),
   Protocol.Credentials(..),
   Protocol.UserProtocolVersion,
-  -- ** Failure
+  -- * Failure
   Failure(..),
-  Protocol.ProtocolVersion,
-  -- ** Interaction
+  -- * Monad-transformer
+  ConnectionT,
+  runConnectionT,
   request,
 )
 where
@@ -56,21 +55,6 @@ data URL =
   -- | Host name, port and credentials.
   Host Text Int Protocol.Credentials
 
-data Failure = 
-  -- |
-  -- Unable to connect to the provided url.
-  UnreachableURL |
-  -- |
-  -- A failure during the handshake phase.
-  HandshakeFailure Protocol.HandshakeFailure | 
-  -- |
-  -- A server-side failure concerning this connection.
-  InteractionFailure Protocol.InteractionFailure | 
-  -- |
-  -- A client-side failure related to connection bookkeeping.
-  SessionFailure S.Failure
-  deriving (Show)
-
 instance MonadTrans (ConnectionT i o) where
   lift = ConnectionT . lift . lift . lift
 
@@ -83,7 +67,7 @@ instance MonadTransControl (ConnectionT i o) where
     state <- ConnectionT $ ask
     ConnectionT $ lift $ lift $ liftWith $ \runInteractionT -> runToBase $
       unConnectionT >>> flip runReaderT state >>> runEitherT >>> runInteractionT >=>
-      I.unStT >>> fmapL SessionFailure >>> join >>> StT >>> return
+      I.unStT >>> fmapL adaptSessionFailure >>> join >>> StT >>> return
   restoreT base = do
     StT r <- ConnectionT $ lift $ lift $ lift $ base
     ConnectionT $ lift $ either throwError return r
@@ -110,13 +94,13 @@ runConnectionT (url, credentials, userProtocolVersion) t =
       Right r -> return r
       Left e -> case ioeGetErrorType e of
         NoSuchThing -> left $ UnreachableURL
-        _ -> $bug $ "Unexpected IOException: " <> show e
+        _ -> $bug $ "Unexpected IOException: " <> (packText . show) e
     closeSocket socket = liftIO $ hClose socket
     
     runHandshake socket =
       S.run session settings >>= 
-      hoistEither . fmapL SessionFailure >>= 
-      hoistEither . fmapL HandshakeFailure
+      hoistEither . fmapL adaptSessionFailure >>= 
+      hoistEither . fmapL adaptHandshakeFailure
       where
         session = Sessions.handshake credentials userProtocolVersion
         settings = (socket, 10^6*1)
@@ -135,7 +119,7 @@ runStack socket keepaliveState timeout t =
   flip runReaderT (keepaliveState, timeout) |>
   runEitherT |>
   flip I.run (socket, 10^6*30) |>
-  liftM (join . fmapL SessionFailure)
+  liftM (join . fmapL adaptSessionFailure)
 
 openURLSocketIO :: URL -> IO Handle
 openURLSocketIO = \case
@@ -184,7 +168,7 @@ interact ::
   Protocol.Request i -> ConnectionT i o m (Maybe o)
 interact = 
   I.interact >>> lift >>> lift >>> ConnectionT >=> 
-  either (throwError . InteractionFailure) return
+  either (throwError . adaptInteractionFailure) return
 
 checkIn :: 
   (Serializable IO i, Serializable IO o, MonadIO m, Applicative m) => 
@@ -201,3 +185,51 @@ request ::
 request a = 
   interact (Protocol.UserRequest a) >>= 
   maybe ($bug "Unexpected response") return
+
+
+-- Failure
+----------------------------
+
+data Failure = 
+  -- |
+  -- Unable to connect to the provided url.
+  UnreachableURL |
+  -- |
+  -- Server has too many connections already.
+  ServerIsBusy |
+  -- | 
+  -- A mismatch of the internal protocol versions on client and server.
+  -- First is the version on the client, second is the version on the server.
+  ProtocolVersionMismatch Int Int |
+  -- | 
+  -- A mismatch of the user-supplied versions of custom protocol on client and server.
+  -- First is the version on the client, second is the version on the server.
+  UserProtocolVersionMismatch Int Int |
+  -- |
+  -- Incorrect credentials.
+  Unauthenticated |
+  -- |
+  -- Connection got interrupted for some reason.
+  ConnectionInterrupted |
+  -- |
+  -- Server has not responded in the required amount of time.
+  ResponseTimeoutReached
+  deriving (Show)
+
+adaptHandshakeFailure :: Protocol.HandshakeFailure -> Failure
+adaptHandshakeFailure = \case
+  Protocol.ServerIsBusy -> ServerIsBusy
+  Protocol.ProtocolVersionMismatch c s -> ProtocolVersionMismatch c s
+  Protocol.UserProtocolVersionMismatch c s -> UserProtocolVersionMismatch c s
+  Protocol.Unauthenticated -> Unauthenticated
+
+adaptInteractionFailure :: Protocol.InteractionFailure -> Failure
+adaptInteractionFailure = \case
+  Protocol.CorruptRequest t -> $bug $ "Server reports corrupt request: " <> t
+  Protocol.TimeoutReached -> $bug $ "A connection keepalive timeout reached"
+
+adaptSessionFailure :: S.Failure -> Failure
+adaptSessionFailure = \case
+  S.ConnectionInterrupted -> ConnectionInterrupted
+  S.TimeoutReached -> ResponseTimeoutReached
+  S.CorruptData t -> $bug $ "Corrupt server response: " <> t

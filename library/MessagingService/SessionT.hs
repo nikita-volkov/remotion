@@ -38,7 +38,7 @@ run (SessionT t) settings = runReaderT t settings |> runEitherT
 ioeToFailure :: IOException -> Failure
 ioeToFailure e = ioeGetErrorType e |> \case
   ResourceVanished -> ConnectionInterrupted
-  _ -> $bug $ "Unexpected IOError: " <> show e
+  _ -> $bug $ "Unexpected IOError: " <> (packText . show) e
 
 receive :: (Serializable IO i, MonadIO m) => SessionT m i
 receive = SessionT $ do

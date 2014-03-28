@@ -156,7 +156,7 @@ traceM s = trace s $ return ()
 packText = Data.Text.pack
 unpackText = Data.Text.unpack
 
-bug = [e| $failure . (msg <>) |]
+bug = [e| $failure . (msg <>) . Data.Text.unpack |]
   where
     msg = "A \"messaging-service\" package bug: " :: String
 
