@@ -44,7 +44,7 @@ source-repository head
 
 library
   hs-source-dirs:
-    library
+    src
   other-modules:
     Remotion.Protocol
     Remotion.SessionT
