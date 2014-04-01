@@ -45,7 +45,7 @@ type InteractionT i o = I.InteractionT (Protocol.Request i) (Protocol.Response o
 
 -- |
 -- Settings of 'ConnectionT'.
-type Settings = (URL, Protocol.Credentials, Protocol.UserProtocolVersion)
+type Settings = (URL, Protocol.UserProtocolVersion)
 
 -- |
 -- Location of the server.
@@ -85,7 +85,7 @@ runConnectionT ::
   (Serializable IO i, Serializable IO o, MonadIO m, Applicative m,
    MonadBaseControl IO m) => 
   Settings -> ConnectionT i o m r -> m (Either Failure r)
-runConnectionT (url, credentials, userProtocolVersion) t = 
+runConnectionT (url, userProtocolVersion) t = 
   runEitherT $ bracketEitherT openSocket closeSocket $ \socket -> do
     timeout <- runHandshake socket
     runInteraction socket timeout
@@ -103,6 +103,9 @@ runConnectionT (url, credentials, userProtocolVersion) t =
       hoistEither . fmapL adaptHandshakeFailure
       where
         session = Sessions.handshake credentials userProtocolVersion
+        credentials = case url of
+          Socket _ -> Nothing
+          Host _ _ x -> x
         settings = (socket, 10^6*1)
 
     runInteraction socket timeout = do
