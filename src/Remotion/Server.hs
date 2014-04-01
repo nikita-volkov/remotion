@@ -69,7 +69,7 @@ type Log = Text -> IO ()
 -- A monad transformer, which runs the server in the background.
 newtype ServeT m a = 
   ServeT { unServeT :: ReaderT Wait m a }
-  deriving (Functor, Applicative, Monad, MonadIO)
+  deriving (Functor, Applicative, Monad, MonadIO, MonadTrans)
 
 type Wait = IO ()
 

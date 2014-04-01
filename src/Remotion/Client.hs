@@ -217,7 +217,7 @@ data Failure =
   -- |
   -- Server has not responded in the required amount of time.
   ResponseTimeoutReached
-  deriving (Show)
+  deriving (Show, Read, Ord, Eq, Generic, Data, Typeable)
 
 adaptHandshakeFailure :: Protocol.HandshakeFailure -> Failure
 adaptHandshakeFailure = \case
