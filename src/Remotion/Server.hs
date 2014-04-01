@@ -65,6 +65,12 @@ type MaxClients = Int
 -- @(Data.Text.IO.'Data.Text.IO.putStrLn' . (\"Remotion.Server: \" `<>`))@.
 type Log = Text -> IO ()
 
+--------------------------------------------------------------------------------
+
+
+-- API
+------------------------
+
 -- |
 -- A monad transformer, which runs the server in the background.
 newtype ServeT m a = 
@@ -127,7 +133,6 @@ runServeT (userVersion, listeningMode, timeout, maxClients, log, processRequest)
   liftIO $ stop
   return r
   
-
 -- | Block until the server stops due to an error.
 wait :: (MonadIO m) => ServeT m ()
 wait = ServeT $ ask >>= liftIO
@@ -136,3 +141,27 @@ wait = ServeT $ ask >>= liftIO
 -- Run the server, while blocking the calling thread.
 runAndWait :: (Serializable IO i, Serializable IO o) => Settings i o s -> IO ()
 runAndWait settings = runServeT settings $ wait
+
+
+-- "monad-control" instances
+-------------------------
+
+instance MonadBase IO m => MonadBase IO (ServeT m) where
+  liftBase = ServeT . liftBase
+
+instance MonadTransControl ServeT where
+  newtype StT ServeT a = StT { unStT :: a }
+  liftWith runToM = do
+    wait <- ServeT $ ask
+    ServeT $ lift $ runToM $ liftM StT . flip runReaderT wait . unServeT
+  restoreT m = do
+    StT r <- ServeT $ lift $ m
+    return r
+    
+instance (MonadBaseControl IO m) => MonadBaseControl IO (ServeT m) where
+  newtype StM (ServeT m) a = StMT { unStMT :: ComposeSt ServeT m a }
+  liftBaseWith = defaultLiftBaseWith StMT
+  restoreM = defaultRestoreM unStMT
+
+
+
