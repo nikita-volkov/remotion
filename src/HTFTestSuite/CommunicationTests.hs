@@ -5,6 +5,7 @@ import Test.Framework
 import Remotion.Util.Prelude hiding (State, state)
 import qualified Remotion.Client as C
 import qualified Remotion.Server as S
+import qualified Control.Concurrent.Async.Lifted as As
 
 
 -- Setup
@@ -121,4 +122,15 @@ test_unmatchingUserProtocolVersions = do
   where
     serverSettings = (1, hostLM, timeout, 100)
     clientSettings = (2, hostURL)
+
+test_requestAnOfflineServer = do
+  assertEqual (Left $ C.ConnectionInterrupted) =<< do
+    forkIO $ do
+      runServeT serverSettings $ do
+        liftIO $ threadDelay $ 10^3*500
+      return ()
+    liftIO $ threadDelay $ 10^3*100
+    runConnectionT clientSettings $ do
+      liftIO $ threadDelay $ 10^3*500
+      C.request Increase
 
