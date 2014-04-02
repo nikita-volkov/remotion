@@ -25,8 +25,8 @@ module Remotion.Server
 import Remotion.Util.Prelude hiding (listen)
 import qualified Remotion.Server.Connection as C
 import qualified Remotion.Protocol as P
-import qualified Remotion.Util.Forking as F
 import qualified Remotion.Util.FileSystem as FS
+import qualified Control.Concurrent.Async.Lifted as As
 import qualified Network
 import qualified Data.Set as Set
 
@@ -93,51 +93,45 @@ runServeT (userVersion, listeningMode, timeout, maxClients, log, processRequest)
   listeningSocket <- liftIO $ Network.listenOn portID
 
   slotsVar <- liftIO $ newMVar maxClients
-  sessionThreadsVar <- liftIO $ newMVar Set.empty
 
-  let 
-    listen = forever $ modifyMVar_ slotsVar $ \slots -> do
-      log "Listening"
-      (connectionSocket, _, _) <- Network.accept listeningSocket
-      log "Client connected"
-      let 
-        available = slots > 0
-        forkRethrowing = F.forkRethrowingFinally $ do
-          modifyMVar_ slotsVar (return . succ)
-          hClose connectionSocket
-          unregisterThread
-        registerThread = do
-          tid <- F.myThreadId
-          modifyMVar_ sessionThreadsVar $ return . Set.insert tid
-        unregisterThread = do
-          tid <- F.myThreadId
-          modifyMVar_ sessionThreadsVar $ return . Set.delete tid
-        runConnection = do
-          r <- C.runConnection connectionSocket available auth timeout userVersion processRequest
+  activeListenerLock <- liftIO $ newMVar ()
+
+  liftIO $ log "Listening"
+
+  -- Spawn all workers
+  listenerAsyncs <- liftIO $ forM [1..(maxClients + 1)] $ \i -> 
+    let 
+      log' = log . (("Listener " <> packText (show i) <> ": ") <>)
+      acquire = do
+        (connectionSocket, _, _) <- withMVar activeListenerLock $ const $ do
+          log' $ "Listening for connection on socket " <> (packText . show) listeningSocket
+          Network.accept listeningSocket
+        modifyMVar_ slotsVar $ return . pred
+        return connectionSocket
+      release connectionSocket = do  
+        log' "Releasing session's resources"
+        hClose connectionSocket
+        modifyMVar_ slotsVar $ return . succ
+      process connectionSocket = do
+        log' "Running client session"
+        slots <- readMVar slotsVar
+        C.runConnection connectionSocket (slots > 0) auth timeout userVersion processRequest >>=
           either 
-            (log . ("Client failure: " <>) . packText . show) 
-            (const $ log "Client disconnected")
-            r
-        in 
-          forkRethrowing $ do
-            registerThread
-            runConnection
-      return $ slots - 1
-    cleanUp = do
-      takeMVar sessionThreadsVar >>= mapM_ F.killThread
-      Network.sClose listeningSocket
-
-  (listenThread, listenWait) <- liftIO $ F.forkRethrowingFinallyWithWait cleanUp listen
-  
-  let 
-    wait = void $ listenWait
+            (log' . ("Session failed: " <>) . packText . show) 
+            (const $ log' "Session closed")
+      in As.async $ forever $ acquire >>= \s -> finally (process s) (release s)
+  let
+    wait = do
+      void $ As.waitAnyCancel listenerAsyncs
     stop = do
       log $ "Stopping server"
-      F.killThread listenThread
-  r <- unServeT m |> flip runReaderT wait
-  liftIO $ stop
+      forM_ listenerAsyncs As.cancel
+      Network.sClose listeningSocket
+
+  r <- runReaderT (unServeT m) wait 
+  liftIO stop
   return r
-  
+
 -- | Block until the server stops due to an error.
 wait :: (MonadIO m) => ServeT m ()
 wait = ServeT $ ask >>= liftIO
