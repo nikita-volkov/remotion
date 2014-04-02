@@ -18,6 +18,7 @@ module Remotion.Util.Prelude
     diffToMillis,
     diffToMicros,
     bracketEitherT,
+    traceUncaughtExceptions,
   )
   where
 
@@ -193,3 +194,14 @@ bracketEitherT acquire release apply = do
   release r
   hoistEither z
 
+traceUncaughtExceptions :: MonadBaseControl IO m => m a -> m a
+traceUncaughtExceptions m = 
+  control $ \runInIO -> catch (runInIO m) $ \(SomeException e) -> runInIO $ do
+    let rep = typeOf e
+        tyCon = typeRepTyCon rep
+    traceM $ 
+      "## Exception:\n" ++
+      "   Type: " ++ show rep ++ "\n" ++
+      "   Module: " ++ tyConModule tyCon ++ "\n" ++
+      "   Package: " ++ tyConPackage tyCon
+    undefined

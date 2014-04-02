@@ -29,7 +29,7 @@ processRequest state clientState = \case
   Divide by -> modifyMVar_ state (pure . (/by)) >> return (Left ())
   Get -> readMVar state |$> Right
 
-logToConsole = Data.Text.IO.putStrLn
+logToConsole = traceM . unpackText . ("Server: " <>)
 dontLog = void . return
 
 socket = dir <> ".socket"
