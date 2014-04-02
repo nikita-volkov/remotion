@@ -15,7 +15,8 @@ module HTFTestSuite.Prelude
     (|$>),
     microsToDiff,
     diffToMicros,
-    bracketEitherT,
+    bracketME,
+    finallyME,
     tracingExceptions,
   )
   where
@@ -181,17 +182,18 @@ microsToDiff = fromRational . (%(10^6))
 diffToMicros :: (Real a, Integral b) => a -> b
 diffToMicros = round . (*(10^3)) . toRational
 
-bracketEitherT :: 
-  (Monad m) => 
-  EitherT e m a -> 
-  (a -> EitherT e m b) -> 
-  (a -> EitherT e m c) -> 
-  EitherT e m c
-bracketEitherT acquire release apply = do
+bracketME :: (MonadError e m) => m a -> (a -> m b) -> (a -> m c) -> m c
+bracketME acquire release apply = do
   r <- acquire
-  z <- lift $ runEitherT $ apply r
+  z <- catchError (liftM Right $ apply r) (return . Left)
   release r
-  hoistEither z
+  either throwError return z
+
+finallyME :: (MonadError e m) => m a -> m b -> m a
+finallyME m f = do
+  z <- catchError (liftM Right $ m) (return . Left)
+  f
+  either throwError return z
 
 tracingExceptions :: MonadBaseControl IO m => m a -> m a
 tracingExceptions m = 
@@ -203,4 +205,4 @@ tracingExceptions m =
       "   Type: " ++ show rep ++ "\n" ++
       "   Module: " ++ tyConModule tyCon ++ "\n" ++
       "   Package: " ++ tyConPackage tyCon
-    undefined
+    liftBase $ throwIO $ e

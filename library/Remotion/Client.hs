@@ -58,35 +58,18 @@ data URL =
 instance MonadTrans (ConnectionT i o) where
   lift = ConnectionT . lift . lift . lift
 
-instance (MonadBase IO m) => MonadBase IO (ConnectionT i o m) where
-  liftBase = ConnectionT . liftBase
-
-instance MonadTransControl (ConnectionT i o) where
-  newtype StT (ConnectionT i o) a = StT { unStT :: Either Failure a }
-  liftWith runToBase = do
-    state <- ConnectionT $ ask
-    ConnectionT $ lift $ lift $ liftWith $ \runInteractionT -> runToBase $
-      unConnectionT >>> flip runReaderT state >>> runEitherT >>> runInteractionT >=>
-      I.unStT >>> fmapL adaptSessionFailure >>> join >>> StT >>> return
-  restoreT base = do
-    StT r <- ConnectionT $ lift $ lift $ lift $ base
-    ConnectionT $ lift $ either throwError return r
-
-instance (MonadBaseControl IO m) => MonadBaseControl IO (ConnectionT i o m) where
-  newtype StM (ConnectionT i o m) a = StMT { unStMT :: ComposeSt (ConnectionT i o) m a }
-  liftBaseWith = defaultLiftBaseWith StMT
-  restoreM = defaultRestoreM unStMT
 
 -- |
 -- Run 'ConnectionT' in the base monad.
 -- 
 -- Requires the base monad to have a 'MonadBaseControl' instance for 'IO'.
 runConnectionT :: 
+  forall i o m r.
   (Serializable IO i, Serializable IO o, MonadIO m, Applicative m,
    MonadBaseControl IO m) => 
   Settings -> ConnectionT i o m r -> m (Either Failure r)
 runConnectionT (userProtocolVersion, url) t = 
-  runEitherT $ bracketEitherT openSocket closeSocket $ \socket -> do
+  runEitherT $ bracketME openSocket closeSocket $ \socket -> do
     timeout <- runHandshake socket
     runInteraction socket timeout
   where
@@ -95,8 +78,10 @@ runConnectionT (userProtocolVersion, url) t =
       Left e -> case ioeGetErrorType e of
         NoSuchThing -> left $ UnreachableURL
         _ -> $bug $ "Unexpected IOException: " <> (packText . show) e
-    closeSocket socket = liftIO $ hClose socket
-    
+    closeSocket socket = 
+      liftIO $ 
+      handle (const $ return () :: SomeException -> IO ()) $ 
+      hClose socket
     runHandshake socket =
       S.run session settings >>= 
       hoistEither . fmapL adaptSessionFailure >>= 
@@ -107,13 +92,14 @@ runConnectionT (userProtocolVersion, url) t =
           Socket _ -> Nothing
           Host _ _ x -> x
         settings = (socket, 10^6*1)
-
     runInteraction socket timeout = do
       keepaliveState <- liftIO $ newMVar =<< Just <$> getCurrentTime
-      join $ fmap hoistEither $ lift $ runStack socket keepaliveState timeout $ do
-        A.withAsync (t <* closeSession <* stopKeepalive) $ \ta -> 
-          A.withAsync keepaliveLoop $ \ka -> do
-            A.waitBoth ta ka >>= \(tr, kr) -> return tr
+      let
+        run :: forall r. ConnectionT i o m r -> EitherT Failure m r
+        run = join . fmap hoistEither . lift . runStack socket keepaliveState timeout
+      A.withAsync (finallyME (run $ t <* closeSession) (run $ stopKeepalive)) $ \ta ->
+        A.withAsync (run $ keepaliveLoop) $ \ka -> do
+          A.waitBoth ta ka >>= \(tr, kr) -> return tr
 
 runStack :: 
   (MonadIO m) =>
