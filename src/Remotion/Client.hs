@@ -111,7 +111,7 @@ runConnectionT (url, userProtocolVersion) t =
     runInteraction socket timeout = do
       keepaliveState <- liftIO $ newMVar =<< Just <$> getCurrentTime
       join $ fmap hoistEither $ lift $ runStack socket keepaliveState timeout $ do
-        A.withAsync t $ \ta -> A.withAsync keepaliveLoop $ \ka -> do
+        A.withAsync (t <* stopKeepalive) $ \ta -> A.withAsync keepaliveLoop $ \ka -> do
           A.waitBoth ta ka >>= \(tr, kr) -> return tr
 
 runStack :: 
