@@ -35,10 +35,15 @@ data Failure =
 run :: SessionT m r -> Settings -> m (Either Failure r)
 run (SessionT t) settings = runReaderT t settings |> runEitherT
 
-ioeToFailure :: IOException -> Failure
-ioeToFailure e = ioeGetErrorType e |> \case
+adaptIOException :: IOException -> Failure
+adaptIOException e = ioeGetErrorType e |> \case
   ResourceVanished -> ConnectionInterrupted
   _ -> $bug $ "Unexpected IOError: " <> (packText . show) e
+
+adaptException :: SomeException -> Failure
+adaptException e = if
+  | Just ioe <- fromException e -> adaptIOException ioe
+  | otherwise -> $bug $ "Unexpected exception: " <> packText (show e)
 
 receive :: (Serializable IO i, MonadIO m) => SessionT m i
 receive = SessionT $ do
@@ -49,14 +54,14 @@ receive = SessionT $ do
     Right (Just (Right Nothing)) -> throwError $ CorruptData "No data"
     Right (Just (Left t)) -> throwError $ CorruptData t
     Right Nothing -> throwError $ TimeoutReached
-    Left ioe -> throwError $ ioeToFailure ioe
+    Left e -> throwError $ adaptException e
   
 send :: (Serializable IO o, MonadIO m, Applicative m) => o -> SessionT m ()
 send a = SessionT $ do
   (handle, timeout) <- ask
   let pipe = serializingProducer a >-> PipesByteString.toHandle handle
   lift $ do
-    tr <- fmapLT ioeToFailure $ tryIO $ Timeout.timeout timeout $ runEffect $ pipe
+    tr <- fmapLT adaptException $ syncIO $ Timeout.timeout timeout $ runEffect $ pipe
     failWith TimeoutReached tr
 
 
