@@ -11,9 +11,9 @@ import qualified HTFTestSuite.Setup1 as Setup1
 test_socketConnection = do
   state <- newMVar 0
   r <- Setup1.runStack (serverSettings state) clientSettings $ do
-    lift $ Client.request $ Setup1.Increase
-    lift $ Client.request $ Setup1.Increase
-    lift $ Client.request $ Setup1.Get
+    Client.request $ Setup1.Increase
+    Client.request $ Setup1.Increase
+    Client.request $ Setup1.Get
   assertEqual (Right $ Right 2) r
   where
     serverSettings state = (pv, lm, to, mc, lo, pr) where

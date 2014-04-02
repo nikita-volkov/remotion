@@ -9,7 +9,7 @@ import qualified Data.Text.IO
 
 
 type Communicate m r = 
-  Server.ServeT (Client.ConnectionT Request Response m) r
+  Client.ConnectionT Request Response (Server.ServeT m) r
 
 data Request = 
   Increase | Decrease | Multiply Float | Divide Float | Get
@@ -42,4 +42,4 @@ runStack ::
   Server.Settings Request Response s -> Client.Settings -> Communicate IO r -> 
   IO (Either Client.Failure r)
 runStack s c m = 
-  Client.runConnectionT c $ Server.runServeT s m
+  Client.runConnectionT c m |> Server.runServeT s
