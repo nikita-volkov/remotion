@@ -199,7 +199,7 @@ traceUncaughtExceptions m =
     let rep = typeOf e
         tyCon = typeRepTyCon rep
     traceM $ 
-      "## Exception:\n" ++
+      "## Uncaught exception: " ++ show e ++ "\n" ++
       "   Type: " ++ show rep ++ "\n" ++
       "   Module: " ++ tyConModule tyCon ++ "\n" ++
       "   Package: " ++ tyConPackage tyCon
