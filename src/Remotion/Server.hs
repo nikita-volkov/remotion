@@ -114,7 +114,7 @@ runServeT (userVersion, listeningMode, timeout, maxClients, log, processRequest)
           modifyMVar_ sessionThreadsVar $ return . Set.delete tid
         runConnection =
           C.runConnection connectionSocket available auth timeout userVersion processRequest >>=
-          either (liftIO . log . ("Session error: " <>) . packText . show) (const $ return ())
+          either (liftIO . log . ("Connection failure: " <>) . packText . show) (const $ return ())
         in 
           forkRethrowing $ do
             registerThread
@@ -128,7 +128,9 @@ runServeT (userVersion, listeningMode, timeout, maxClients, log, processRequest)
   
   let 
     wait = void $ listenWait
-    stop = F.killThread listenThread
+    stop = do
+      log $ "Stopping server"
+      F.killThread listenThread
   r <- unServeT m |> flip runReaderT wait
   liftIO $ stop
   return r
