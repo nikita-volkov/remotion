@@ -83,8 +83,7 @@ type Wait = IO ()
 -- |
 -- A ServeT failure.
 data Failure =
-  -- | An IO exception has been thrown while opening a listening socket.
-  ListeningSocketFailure IOException
+  ListeningSocketIsBusy
   -- -- FIXME: implement the following
   -- -- | An IO exception has been thrown while accepting a connection socket.
   -- ConnectionSocketFailure IOException
@@ -101,7 +100,11 @@ runServeT (userVersion, listeningMode, timeout, maxClients, log, processRequest)
         Host port auth -> (Network.PortNumber $ fromIntegral port, auth)
         Socket path -> (Network.UnixSocket $ FS.encodeString path, const $ pure True)
 
-  listeningSocket <- fmapLT ListeningSocketFailure $ tryIO $ Network.listenOn portID
+  listeningSocket <- Network.listenOn portID |> try |> liftIO >>= \case
+    Left e -> case ioeGetErrorType e of
+      ResourceBusy -> left ListeningSocketIsBusy
+      _ -> $bug $ "Unexpected IO error: " <> (packText . show) e
+    Right r -> return r
 
   slotsVar <- liftIO $ newMVar maxClients
 
@@ -138,10 +141,13 @@ runServeT (userVersion, listeningMode, timeout, maxClients, log, processRequest)
       log $ "Stopping server"
       forM_ listenerAsyncs As.cancel
       Network.sClose listeningSocket
+      case listeningMode of
+        Socket path -> FS.removeFile path
+        _ -> return ()
 
   r <- lift $ runReaderT (unServeT m) wait 
   liftIO stop
-  right r
+  return r
 
 -- | Block until the server stops due to an error.
 wait :: (MonadIO m) => ServeT m ()
