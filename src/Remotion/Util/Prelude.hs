@@ -13,9 +13,7 @@ module Remotion.Util.Prelude
     (|>),
     (<|),
     (|$>),
-    millisToDiff,
     microsToDiff,
-    diffToMillis,
     diffToMicros,
     bracketEitherT,
     traceUncaughtExceptions,
@@ -177,10 +175,11 @@ aToB <| a = aToB a
 (|$>) = flip fmap
 {-# INLINE (|$>) #-}
 
-millisToDiff = (*(10^9)) >>> fromIntegral
-microsToDiff = (*(10^6)) >>> fromIntegral
-diffToMillis = realToFrac >>> (*(10^3)) >>> round
-diffToMicros = realToFrac >>> (*(10^6)) >>> round
+microsToDiff :: Fractional c => Integer -> c
+microsToDiff = fromRational . (%(10^6))
+
+diffToMicros :: (Real a, Integral b) => a -> b
+diffToMicros = round . (*(10^3)) . toRational
 
 bracketEitherT :: 
   (Monad m) => 
