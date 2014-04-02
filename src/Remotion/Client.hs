@@ -111,8 +111,9 @@ runConnectionT (url, userProtocolVersion) t =
     runInteraction socket timeout = do
       keepaliveState <- liftIO $ newMVar =<< Just <$> getCurrentTime
       join $ fmap hoistEither $ lift $ runStack socket keepaliveState timeout $ do
-        A.withAsync (t <* stopKeepalive) $ \ta -> A.withAsync keepaliveLoop $ \ka -> do
-          A.waitBoth ta ka >>= \(tr, kr) -> return tr
+        A.withAsync (t <* closeSession <* stopKeepalive) $ \ta -> 
+          A.withAsync keepaliveLoop $ \ka -> do
+            A.waitBoth ta ka >>= \(tr, kr) -> return tr
 
 runStack :: 
   (MonadIO m) =>
@@ -178,6 +179,13 @@ checkIn ::
   ConnectionT i o m ()
 checkIn = 
   interact Protocol.Keepalive >>= 
+  maybe (return ()) ($bug "Unexpected response")
+
+closeSession ::
+  (Serializable IO i, Serializable IO o, MonadIO m, Applicative m) => 
+  ConnectionT i o m ()
+closeSession =
+  interact Protocol.CloseSession >>=
   maybe (return ()) ($bug "Unexpected response")
 
 -- |

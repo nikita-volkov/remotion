@@ -112,9 +112,12 @@ runServeT (userVersion, listeningMode, timeout, maxClients, log, processRequest)
         unregisterThread = do
           tid <- F.myThreadId
           modifyMVar_ sessionThreadsVar $ return . Set.delete tid
-        runConnection =
-          C.runConnection connectionSocket available auth timeout userVersion processRequest >>=
-          either (liftIO . log . ("Connection failure: " <>) . packText . show) (const $ return ())
+        runConnection = do
+          r <- C.runConnection connectionSocket available auth timeout userVersion processRequest
+          either 
+            (log . ("Client failure: " <>) . packText . show) 
+            (const $ log "Client disconnected")
+            r
         in 
           forkRethrowing $ do
             registerThread
