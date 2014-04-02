@@ -44,7 +44,7 @@ source-repository head
 
 library
   hs-source-dirs:
-    src
+    library
   other-modules:
     Remotion.Protocol
     Remotion.SessionT
@@ -133,10 +133,11 @@ test-suite remotion-htf-test-suite
   type:             
     exitcode-stdio-1.0
   hs-source-dirs:   
-    src
+    htf-test-suite
   main-is:          
     HTFTestSuite.hs
   build-depends:
+    remotion,
     -- testing:
     quickcheck-instances,
     QuickCheck-GenT == 0.1.*,

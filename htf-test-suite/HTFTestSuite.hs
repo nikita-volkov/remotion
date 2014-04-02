@@ -1,7 +1,7 @@
 {-# OPTIONS_GHC -F -pgmF htfpp #-}
 
 import Test.Framework
-import Remotion.Util.Prelude
+import HTFTestSuite.Prelude
 
 import {-@ HTF_TESTS @-} HTFTestSuite.CommunicationTests
 

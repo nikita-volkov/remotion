@@ -2,7 +2,7 @@
 module HTFTestSuite.CommunicationTests where
 
 import Test.Framework
-import Remotion.Util.Prelude hiding (State, state)
+import HTFTestSuite.Prelude hiding (State, state)
 import qualified Remotion.Client as C
 import qualified Remotion.Server as S
 import qualified Control.Concurrent.Async.Lifted as As
