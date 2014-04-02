@@ -36,10 +36,13 @@ socketLM = S.Socket socket
 port = 45039
 hostLM = S.Host port authenticate
 authenticate = return . (== credentials) 
-hostURL = C.Host "127.0.0.1" port credentials
+hostURL = C.Host host port credentials
+host = "127.0.0.1"
 credentials = Just "p1"
 dir = "./dist/test/"
 timeout = 500 * 10 ^ 3
+serverSettings = (1, hostLM, timeout, 100)
+clientSettings = (1, hostURL)
 
 runServeT :: 
   (MonadIO m) => 
@@ -89,4 +92,33 @@ test_serverResourcesGetReleased = do
     serverSettings = (1, socketLM, timeout, 100)
 
 test_tooManyConnections = unitTestPending "MaxClients setting"
+
+test_invalidCredentials = do
+  assertEqual (Right $ Left $ C.Unauthenticated) =<< do
+    runServeT serverSettings $ runConnectionT clientSettings $ return ()
+  where
+    serverSettings = (1, hostLM, timeout, 100)
+    clientSettings = (1, C.Host host port (Just "1"))
+
+test_noCredentials = do
+  assertEqual (Right $ Left $ C.Unauthenticated) =<< do
+    runServeT serverSettings $ runConnectionT clientSettings $ return ()
+  where
+    serverSettings = (1, hostLM, timeout, 100)
+    clientSettings = (1, C.Host host port Nothing)
+
+test_connectingToAnOfflineServer = do
+  assertEqual (Left $ C.UnreachableURL) =<< do
+    runServeT serverSettings (return ())
+    runConnectionT clientSettings $ return ()
+  where
+    serverSettings = (1, hostLM, timeout, 100)
+    clientSettings = (1, hostURL)
+
+test_unmatchingUserProtocolVersions = do
+  assertEqual (Right $ Left $ C.UserProtocolVersionMismatch 2 1) =<< do
+    runServeT serverSettings $ runConnectionT clientSettings $ return ()
+  where
+    serverSettings = (1, hostLM, timeout, 100)
+    clientSettings = (2, hostURL)
 
