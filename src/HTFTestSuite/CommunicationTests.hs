@@ -45,7 +45,7 @@ runServeT ::
   (MonadIO m) => 
   (S.UserProtocolVersion, S.ListeningMode, S.Timeout, S.MaxClients) ->
   S.ServeT m a -> 
-  m a
+  m (Either S.Failure a)
 runServeT (upv, lm, to, mc) t = do
   state <- liftIO $ newMVar 0
   S.runServeT (settings state) t
@@ -62,7 +62,7 @@ runConnectionT = C.runConnectionT
 -------------------------
 
 test_socketConnection = do
-  assertEqual (Right $ Right 2) =<< do
+  assertEqual (Right $ Right $ Right 2) =<< do
     runServeT serverSettings $ runConnectionT clientSettings $ do
       C.request $ Increase
       C.request $ Increase
@@ -71,15 +71,8 @@ test_socketConnection = do
     serverSettings = (1, socketLM, timeout, 100)
     clientSettings = (1, socketURL)
 
-test_serverResourcesGetReleased = do
-  runServeT serverSettings (return ())
-  runServeT serverSettings (return ())
-  return () :: IO ()
-  where
-    serverSettings = (1, socketLM, timeout, 100)
-
 test_hostConnection = do
-  assertEqual (Right $ Right 2) =<< do
+  assertEqual (Right $ Right $ Right 2) =<< do
     runServeT serverSettings $ runConnectionT clientSettings $ do
       C.request $ Increase
       C.request $ Increase
@@ -88,4 +81,12 @@ test_hostConnection = do
     serverSettings = (1, hostLM, timeout, 100)
     clientSettings = (1, hostURL)
 
+test_serverResourcesGetReleased = do
+  assertEqual (Right ()) =<< do
+    runServeT serverSettings (return ())
+    runServeT serverSettings (return ())
+  where
+    serverSettings = (1, socketLM, timeout, 100)
+
+test_tooManyConnections = unitTestPending "MaxClients setting"
 

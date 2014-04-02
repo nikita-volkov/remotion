@@ -3,6 +3,7 @@ module Remotion.Server
     -- * Control
     -- ** Monad-transformer
     ServeT,
+    Failure,
     runServeT,
     wait,
     -- ** Simple
@@ -80,17 +81,27 @@ newtype ServeT m a =
 type Wait = IO ()
 
 -- |
+-- A ServeT failure.
+data Failure =
+  -- | An IO exception has been thrown while opening a listening socket.
+  ListeningSocketFailure IOException
+  -- -- FIXME: implement the following
+  -- -- | An IO exception has been thrown while accepting a connection socket.
+  -- ConnectionSocketFailure IOException
+  deriving (Show, Eq, Generic, Typeable)
+
+-- |
 -- Run the server, while automatically managing all related resources.
 runServeT :: 
   (Serializable IO i, Serializable IO o, MonadIO m) => 
-  Settings i o s -> ServeT m a -> m a
-runServeT (userVersion, listeningMode, timeout, maxClients, log, processRequest) m = do
+  Settings i o s -> ServeT m a -> m (Either Failure a)
+runServeT (userVersion, listeningMode, timeout, maxClients, log, processRequest) m = runEitherT $ do
 
   let (portID, auth) = case listeningMode of
         Host port auth -> (Network.PortNumber $ fromIntegral port, auth)
         Socket path -> (Network.UnixSocket $ FS.encodeString path, const $ pure True)
 
-  listeningSocket <- liftIO $ Network.listenOn portID
+  listeningSocket <- fmapLT ListeningSocketFailure $ tryIO $ Network.listenOn portID
 
   slotsVar <- liftIO $ newMVar maxClients
 
@@ -128,9 +139,9 @@ runServeT (userVersion, listeningMode, timeout, maxClients, log, processRequest)
       forM_ listenerAsyncs As.cancel
       Network.sClose listeningSocket
 
-  r <- runReaderT (unServeT m) wait 
+  r <- lift $ runReaderT (unServeT m) wait 
   liftIO stop
-  return r
+  right r
 
 -- | Block until the server stops due to an error.
 wait :: (MonadIO m) => ServeT m ()
@@ -138,7 +149,7 @@ wait = ServeT $ ask >>= liftIO
 
 -- |
 -- Run the server, while blocking the calling thread.
-runAndWait :: (Serializable IO i, Serializable IO o) => Settings i o s -> IO ()
+runAndWait :: (Serializable IO i, Serializable IO o) => Settings i o s -> IO (Either Failure ())
 runAndWait settings = runServeT settings $ wait
 
 
