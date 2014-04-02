@@ -45,7 +45,7 @@ type InteractionT i o = I.InteractionT (Protocol.Request i) (Protocol.Response o
 
 -- |
 -- Settings of 'ConnectionT'.
-type Settings = (URL, Protocol.UserProtocolVersion)
+type Settings = (Protocol.UserProtocolVersion, URL)
 
 -- |
 -- Location of the server.
@@ -85,7 +85,7 @@ runConnectionT ::
   (Serializable IO i, Serializable IO o, MonadIO m, Applicative m,
    MonadBaseControl IO m) => 
   Settings -> ConnectionT i o m r -> m (Either Failure r)
-runConnectionT (url, userProtocolVersion) t = 
+runConnectionT (userProtocolVersion, url) t = 
   runEitherT $ bracketEitherT openSocket closeSocket $ \socket -> do
     timeout <- runHandshake socket
     runInteraction socket timeout
