@@ -154,15 +154,26 @@ test_clientDisconnectReleasesASlot = do
 test_keepalive = do
   runServeT serverSettings $ do
     slots <- S.countSlots
-    As.async $ runConnectionT clientSettings $ liftIO $ threadDelay $ 10^5*3
-    liftIO $ threadDelay $ 10^5*2
+    As.async $ runConnectionT clientSettings $ liftIO $ threadDelay $ timeUnit * 3
+    liftIO $ threadDelay $ timeUnit * 2
     slots' <- S.countSlots
     liftIO $ assertEqual (slots - 1) slots'
   return () :: IO ()
   where
-    timeout = 10^5*1
+    timeUnit = 10^3
+    timeout = timeUnit * 1
     serverSettings = (1, hostLM, timeout, 100)
     clientSettings = (1, hostURL)
 
+test_multipleClients = do
+  runServeT serverSettings $ do
+    updates <- do
+      As.mapConcurrently id $ replicate 9 $ 
+        runConnectionT clientSettings $ C.request Increase
+    state <- runConnectionT clientSettings $ C.request Get
+    liftIO $ do
+      assertEqual (replicate 9 $ Right $ Left ()) updates
+      assertEqual (Right $ Right $ 9) state
+  return () :: IO ()
 
 
