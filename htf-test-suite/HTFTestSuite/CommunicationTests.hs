@@ -176,4 +176,15 @@ test_multipleClients = do
       assertEqual (Right $ Right $ 9) state
   return () :: IO ()
 
+test_highLoad = do
+  runServeT serverSettings $ do
+    As.mapConcurrently id $ replicate 100 $ do
+      runConnectionT clientSettings $ do
+        replicateM 100 $ C.request Increase
+    r <- runConnectionT clientSettings $ C.request Get
+    liftIO $ assertEqual (Right $ Right $ 100 * 100) $ r
+  return () :: IO ()
+  where
+    serverSettings = (1, hostLM, timeout, 110)
+    clientSettings = (1, hostURL)
 
