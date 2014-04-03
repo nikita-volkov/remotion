@@ -19,7 +19,6 @@ import Remotion.Util.Prelude hiding (State, listen, interact)
 import qualified Remotion.Util.Prelude as Prelude
 import qualified Remotion.SessionT as S
 import qualified Remotion.Protocol as Protocol
-import qualified Remotion.Client.InteractionT as I
 import qualified Remotion.Client.Sessions as Sessions
 import qualified Control.Concurrent.Async.Lifted as A
 import qualified Control.Concurrent.Lock as Lock
@@ -32,16 +31,18 @@ import qualified Remotion.Util.FileSystem as FS
 -- Supports custom protocols with @i@ being the type of the client request and
 -- @o@ - the server's response.
 newtype ConnectionT i o m r = 
-  ConnectionT { unConnectionT :: ReaderT Env (EitherT Failure (InteractionT i o m)) r }
+  ConnectionT { unConnectionT :: ReaderT Env (EitherT Failure (S.SessionT m)) r }
   deriving (Functor, Applicative, Monad, MonadIO, MonadError Failure)
 
-type Env = (KeepaliveState, Timeout)
+type Env = (KeepaliveState, KeepaliveTimeout, Lock)
 
 type KeepaliveState = MVar (Maybe UTCTime)
 
-type Timeout = Int
+type KeepaliveTimeout = Int
 
-type InteractionT i o = I.InteractionT (Protocol.Request i) (Protocol.Response o)
+-- | Ensures a response to request accomodation in concurrency.
+type Lock = Lock.Lock
+
 
 -- |
 -- Settings of 'ConnectionT'.
@@ -71,7 +72,8 @@ runConnectionT ::
 runConnectionT (userProtocolVersion, url) t = 
   runEitherT $ bracketME openSocket closeSocket $ \socket -> do
     timeout <- runHandshake socket
-    runInteraction socket timeout
+    lock <- liftIO $ Lock.new
+    runInteraction socket timeout lock
   where
     openSocket = openURLSocketIO url |> try |> liftIO >>= \case
       Right r -> return r
@@ -92,23 +94,23 @@ runConnectionT (userProtocolVersion, url) t =
           Socket _ -> Nothing
           Host _ _ x -> x
         settings = (socket, 10^6*1)
-    runInteraction socket timeout = do
+    runInteraction socket timeout lock = do
       keepaliveState <- liftIO $ newMVar =<< Just <$> getCurrentTime
       let
         run :: forall r. ConnectionT i o m r -> EitherT Failure m r
-        run = join . fmap hoistEither . lift . runStack socket keepaliveState timeout
+        run = join . fmap hoistEither . lift . runStack socket keepaliveState timeout lock
       A.withAsync (finallyME (run $ t <* closeSession) (run $ stopKeepalive)) $ \ta ->
         A.withAsync (run $ keepaliveLoop) $ \ka -> do
           A.waitBoth ta ka >>= \(tr, kr) -> return tr
 
 runStack :: 
   (MonadIO m) =>
-  S.Socket -> KeepaliveState -> Timeout -> ConnectionT i o m r -> m (Either Failure r)
-runStack socket keepaliveState timeout t =
+  S.Socket -> KeepaliveState -> KeepaliveTimeout -> Lock -> ConnectionT i o m r -> m (Either Failure r)
+runStack socket keepaliveState timeout lock t =
   unConnectionT t |>
-  flip runReaderT (keepaliveState, timeout) |>
+  flip runReaderT (keepaliveState, timeout, lock) |>
   runEitherT |>
-  flip I.run (socket, 10^6*30) |>
+  flip S.run (socket, 10^6*30) |>
   liftM (join . fmapL adaptSessionFailure)
 
 openURLSocketIO :: URL -> IO Handle
@@ -124,14 +126,14 @@ openURLSocketIO = \case
 
 stopKeepalive :: (MonadIO m) => ConnectionT i o m ()
 stopKeepalive = do
-  (state, _) <- ConnectionT $ ask
+  (state, _, _) <- ConnectionT $ ask
   liftIO $ modifyMVar_ state $ const $ return Nothing
 
 keepaliveLoop :: 
   (Applicative m, MonadIO m, Serializable IO o, Serializable IO i) => 
   ConnectionT i o m ()
 keepaliveLoop = do
-  (state, timeout) <- ConnectionT $ ask
+  (state, timeout, _) <- ConnectionT $ ask
   let loweredTimeout = (floor . reduceTimeout . fromIntegral) timeout
   (liftIO $ readMVar state) >>= \case
     Nothing -> return ()
@@ -153,7 +155,7 @@ reduceTimeout = curve 1 2
 
 resetKeepalive :: (MonadIO m) => ConnectionT i o m ()
 resetKeepalive = do
-  (state, timeout) <- ConnectionT $ ask
+  (state, timeout, _) <- ConnectionT $ ask
   liftIO $ do
     time <- getCurrentTime
     modifyMVar_ state $ const $ return $ Just time
@@ -161,9 +163,20 @@ resetKeepalive = do
 interact :: 
   (Serializable IO o, Serializable IO i, MonadIO m, Applicative m) =>
   Protocol.Request i -> ConnectionT i o m (Maybe o)
-interact = 
-  I.interact >>> lift >>> lift >>> ConnectionT >=> 
-  either (throwError . adaptInteractionFailure) return
+interact = \request -> 
+  withLock $ do
+    send request
+    receive >>= either (throwError . adaptInteractionFailure) return
+  where
+    withLock action = do
+      (_, _, l) <- ConnectionT ask
+      lock l
+      finallyME action (unlock l)
+      where
+        lock = ConnectionT . liftIO . Lock.acquire
+        unlock = ConnectionT . liftIO . Lock.release
+    send r = ConnectionT $ lift $ lift $ S.send r
+    receive = ConnectionT $ lift $ lift $ S.receive
 
 checkIn :: 
   (Serializable IO i, Serializable IO o, MonadIO m, Applicative m) => 
