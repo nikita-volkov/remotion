@@ -130,6 +130,9 @@ library
 
 
 test-suite remotion-htf-test-suite
+  ghc-options:
+    -threaded
+    "-with-rtsopts=-N"
   type:             
     exitcode-stdio-1.0
   hs-source-dirs:   
