@@ -134,3 +134,21 @@ test_requestAnOfflineServer = do
       liftIO $ threadDelay $ 10^3*500
       C.request Increase
 
+test_invalidClientRequests = unitTestPending ""
+
+test_clientConnectAcquiresASlot = do
+  runServeT serverSettings $ do
+    slots <- S.countSlots
+    r <- runConnectionT clientSettings $ lift $ S.countSlots
+    liftIO $ assertEqual (Right $ pred slots) r
+  return () :: IO ()
+
+test_clientDisconnectReleasesASlot = do
+  runServeT serverSettings $ do
+    slots <- S.countSlots
+    runConnectionT clientSettings $ return ()
+    slots' <- S.countSlots
+    liftIO $ assertEqual slots slots'
+  return () :: IO ()
+
+

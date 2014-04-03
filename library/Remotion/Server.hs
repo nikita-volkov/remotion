@@ -6,6 +6,7 @@ module Remotion.Server
     Failure,
     runServeT,
     wait,
+    countSlots,
     -- ** Simple
     runAndWait,
     -- * Settings
@@ -75,10 +76,11 @@ type Log = Text -> IO ()
 -- |
 -- A monad transformer, which runs the server in the background.
 newtype ServeT m a = 
-  ServeT { unServeT :: ReaderT Wait m a }
+  ServeT { unServeT :: ReaderT (Wait, CountSlots) m a }
   deriving (Functor, Applicative, Monad, MonadIO, MonadTrans)
 
 type Wait = IO ()
+type CountSlots = IO Int
 
 -- |
 -- A ServeT failure.
@@ -144,14 +146,19 @@ runServeT (userVersion, listeningMode, timeout, maxClients, log, processRequest)
       case listeningMode of
         Socket path -> FS.removeFile path
         _ -> return ()
+    countSlots = readMVar slotsVar
 
-  r <- lift $ runReaderT (unServeT m) wait 
+  r <- lift $ runReaderT (unServeT m) (wait, countSlots) 
   liftIO stop
   return r
 
 -- | Block until the server stops due to an error.
 wait :: (MonadIO m) => ServeT m ()
-wait = ServeT $ ask >>= liftIO
+wait = ServeT $ ask >>= \(x, _) -> liftIO $ x
+
+-- | Count the currently available slots for new connections.
+countSlots :: (MonadIO m) => ServeT m Int
+countSlots = ServeT $ ask >>= \(_, x) -> liftIO $ x
 
 -- |
 -- Run the server, while blocking the calling thread.
