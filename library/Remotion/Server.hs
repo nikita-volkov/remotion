@@ -120,7 +120,7 @@ runServeT (userVersion, listeningMode, timeout, maxClients, log, processRequest)
       log' = log . (("Listener " <> packText (show i) <> ": ") <>)
       acquire = do
         (connectionSocket, _, _) <- withMVar activeListenerLock $ const $ do
-          log' $ "Listening for connection on socket " <> (packText . show) listeningSocket
+          log' $ "Waiting for connection"
           Network.accept listeningSocket
         modifyMVar_ slotsVar $ return . pred
         return connectionSocket
@@ -146,6 +146,7 @@ runServeT (userVersion, listeningMode, timeout, maxClients, log, processRequest)
       case listeningMode of
         Socket path -> FS.removeFile path
         _ -> return ()
+      log $ "Stopped server"
     countSlots = readMVar slotsVar
 
   r <- lift $ runReaderT (unServeT m) (wait, countSlots) 
