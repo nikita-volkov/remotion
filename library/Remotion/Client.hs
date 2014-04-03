@@ -143,7 +143,7 @@ keepaliveLoop = do
           liftIO $ threadDelay $ diffToMicros $ nextTime `diffUTCTime` currentTime
         else do
           checkIn
-          liftIO $ threadDelay $ diffToMicros $ loweredTimeout
+          liftIO $ threadDelay $ fromIntegral $ loweredTimeout
       keepaliveLoop
 
 resetKeepalive :: (MonadIO m) => ConnectionT i o m ()

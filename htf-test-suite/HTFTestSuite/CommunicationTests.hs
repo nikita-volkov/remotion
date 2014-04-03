@@ -151,4 +151,18 @@ test_clientDisconnectReleasesASlot = do
     liftIO $ assertEqual slots slots'
   return () :: IO ()
 
+test_keepalive = do
+  runServeT serverSettings $ do
+    slots <- S.countSlots
+    As.async $ runConnectionT clientSettings $ liftIO $ threadDelay $ 10^5*3
+    liftIO $ threadDelay $ 10^5*2
+    slots' <- S.countSlots
+    liftIO $ assertEqual (slots - 1) slots'
+  return () :: IO ()
+  where
+    timeout = 10^5*1
+    serverSettings = (1, hostLM, timeout, 100)
+    clientSettings = (1, hostURL)
+
+
 
