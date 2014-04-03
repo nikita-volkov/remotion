@@ -40,14 +40,15 @@ instance (MonadBase IO m) => MonadBase IO (InteractionT i o m) where
   liftBase = InteractionT . liftBase
 
 instance MonadTransControl (InteractionT i o) where
-  newtype StT (InteractionT i o) a = StT { unStT :: Either S.Failure a }
-  liftWith runToBase = do
-    lock <- InteractionT $ ask
-    InteractionT $ lift $ liftWith $ \run' -> runToBase $ 
-      liftM (StT . S.unStT) . run' . flip runReaderT lock . unInteractionT
-  restoreT base = do
-    StT r <- InteractionT $ lift $ lift $ base
-    InteractionT $ lift $ either throwError return r
+  newtype StT (InteractionT i o) a = StT (StT S.SessionT a)
+  liftWith runInM = do
+    env <- InteractionT $ ask
+    InteractionT $ lift $ liftWith $ \runSessionT -> runInM $ 
+      liftM StT . runSessionT . flip runReaderT env . unInteractionT
+  restoreT m = do
+    InteractionT $ lift $ do
+      StT r <- lift $ m
+      restoreT $ return $ r
 
 instance (MonadBaseControl IO m) => MonadBaseControl IO (InteractionT i o m) where
   newtype StM (InteractionT i o m) a = StMT { unStMT :: ComposeSt (InteractionT i o) m a }
