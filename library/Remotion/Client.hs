@@ -132,7 +132,7 @@ keepaliveLoop ::
   ConnectionT i o m ()
 keepaliveLoop = do
   (state, timeout) <- ConnectionT $ ask
-  let loweredTimeout = floor (fromIntegral timeout * 0.9)
+  let loweredTimeout = (floor . reduceTimeout . fromIntegral) timeout
   (liftIO $ readMVar state) >>= \case
     Nothing -> return ()
     Just lastTime -> do
@@ -145,6 +145,11 @@ keepaliveLoop = do
           checkIn
           liftIO $ threadDelay $ fromIntegral $ loweredTimeout
       keepaliveLoop
+
+reduceTimeout :: Double -> Double
+reduceTimeout = curve 1 2
+  where
+    curve bending startingStraightness x = x / exp (bending / (x + startingStraightness))
 
 resetKeepalive :: (MonadIO m) => ConnectionT i o m ()
 resetKeepalive = do
