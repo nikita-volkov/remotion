@@ -51,7 +51,7 @@ receive = SessionT $ do
   let pipe = PipesByteString.fromHandle handle >-> deserializingPipe
   pipe |> PipesPrelude.head |> runEitherT |> Timeout.timeout timeout |> Ex.try |> liftIO >>= \case
     Right (Just (Right (Just r))) -> return r
-    Right (Just (Right Nothing)) -> throwError $ CorruptData "No data"
+    Right (Just (Right Nothing)) -> throwError $ ConnectionInterrupted
     Right (Just (Left t)) -> throwError $ CorruptData t
     Right Nothing -> throwError $ TimeoutReached
     Left e -> throwError $ adaptException e
