@@ -180,7 +180,7 @@ microsToDiff :: Fractional c => Integer -> c
 microsToDiff = fromRational . (%(10^6))
 
 diffToMicros :: (Real a, Integral b) => a -> b
-diffToMicros = round . (*(10^3)) . toRational
+diffToMicros = round . (*(10^6)) . toRational
 
 bracketME :: (MonadError e m) => m a -> (a -> m b) -> (a -> m c) -> m c
 bracketME acquire release apply = do
