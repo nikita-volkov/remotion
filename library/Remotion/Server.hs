@@ -132,7 +132,7 @@ runServeT (userVersion, listeningMode, timeout, maxClients, log, processRequest)
       process connectionSocket = do
         log' "Running client session"
         slots <- readMVar slotsVar
-        C.runConnection connectionSocket (slots > 0) auth timeout userVersion processRequest >>=
+        C.runConnection connectionSocket (slots >= 0) auth timeout userVersion processRequest >>=
           either 
             (log' . ("Session failed: " <>) . packText . show) 
             (const $ log' "Session closed")

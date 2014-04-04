@@ -121,8 +121,6 @@ test_serverResourcesGetReleased = do
   where
     serverSettings = (1, socketLM, timeout, 100)
 
-test_tooManyConnections = unitTestPending "MaxClients setting"
-
 test_invalidCredentials = do
   assertEqual (Right $ Left $ C.Unauthenticated) =<< do
     runServeT serverSettings $ runConnectionT clientSettings $ return ()
@@ -235,3 +233,39 @@ test_concurrentRequestsFromASingleClient = do
           C.request Increase
           C.request Decrease
       C.request Get 
+
+test_tooManyConnections = do
+  assertEqual (Right $ Left $ C.ServerIsBusy) =<< do
+    runServeT serverSettings $ do
+      a <- As.async $ runConnectionT clientSettings $ liftIO $ threadDelay $ 10^3*100
+      b <- As.async $ runConnectionT clientSettings $ liftIO $ threadDelay $ 10^3*100
+      liftIO $ threadDelay $ 10^3*50
+      r <- runConnectionT clientSettings $ return ()
+      mapM_ As.wait [a, b]
+      return r
+  where
+    serverSettings = (1, hostLM, timeout, 2)
+    clientSettings = (1, hostURL)
+
+test_lastConnectionSlot = do
+  assertEqual (Right $ Right $ ()) =<< do
+    runServeT serverSettings $ do
+      a <- As.async $ runConnectionT clientSettings $ liftIO $ threadDelay $ 10^3*100
+      liftIO $ threadDelay $ 10^3*50
+      (runConnectionT clientSettings $ return ()) <* As.wait a
+  where
+    serverSettings = (1, hostLM, timeout, 2)
+    clientSettings = (1, hostURL)
+
+test_multipleHittersOnTooManyConnectionsStillGetSurved = do
+  assertEqual (Right $ replicate 10 $ Left $ C.ServerIsBusy) =<< do
+    runServeT serverSettings $ do
+      As.withAsync (runConnectionT clientSettings $ liftIO $ threadDelay $ 10^3*100) $ \_ -> 
+        As.withAsync (runConnectionT clientSettings $ liftIO $ threadDelay $ 10^3*100) $ \_ -> do
+          liftIO $ threadDelay $ 10^3*50
+          As.mapConcurrently id $ replicate 10 $ runConnectionT clientSettings $ return ()
+  where
+    serverSettings = (1, hostLM, timeout, 2)
+    clientSettings = (1, hostURL)
+
+
