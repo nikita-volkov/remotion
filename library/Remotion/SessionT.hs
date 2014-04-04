@@ -27,7 +27,8 @@ type Timeout = Int
 
 data Failure =
   ConnectionInterrupted |
-  TimeoutReached |
+  ReceiveTimeoutReached Int |
+  SendTimeoutReached Int |
   CorruptData Text
   deriving (Show)
 
@@ -49,20 +50,20 @@ receive :: (Serializable IO i, MonadIO m) => SessionT m i
 receive = SessionT $ do
   (handle, timeout) <- ask
   let pipe = PipesByteString.fromHandle handle >-> deserializingPipe
-  pipe |> PipesPrelude.head |> runEitherT |> Timeout.timeout timeout |> Ex.try |> liftIO >>= \case
-    Right (Just (Right (Just r))) -> return r
-    Right (Just (Right Nothing)) -> throwError $ ConnectionInterrupted
-    Right (Just (Left t)) -> throwError $ CorruptData t
-    Right Nothing -> throwError $ TimeoutReached
-    Left e -> throwError $ adaptException e
+  pipe |> PipesPrelude.head |> runEitherT |> Ex.try |> Timeout.timeout timeout |> liftIO >>= \case
+    Just (Right (Right (Just r))) -> return r
+    Just (Right (Right Nothing)) -> throwError $ ConnectionInterrupted
+    Just (Right (Left t)) -> throwError $ CorruptData t
+    Just (Left e) -> throwError $ adaptIOException e
+    Nothing -> throwError $ ReceiveTimeoutReached timeout
   
 send :: (Serializable IO o, MonadIO m, Applicative m) => o -> SessionT m ()
 send a = SessionT $ do
   (handle, timeout) <- ask
   let pipe = serializingProducer a >-> PipesByteString.toHandle handle
   lift $ do
-    tr <- fmapLT adaptException $ syncIO $ Timeout.timeout timeout $ runEffect $ pipe
-    failWith TimeoutReached tr
+    tr <- fmapLT adaptIOException $ tryIO $ Timeout.timeout timeout $ runEffect $ pipe
+    failWith (SendTimeoutReached timeout) tr
 
 
 instance MonadTrans SessionT where

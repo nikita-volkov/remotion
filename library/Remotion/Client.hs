@@ -251,7 +251,10 @@ data Failure =
   ConnectionInterrupted |
   -- |
   -- Server has not responded in the required amount of time.
-  ResponseTimeoutReached
+  ResponseTimeoutReached Int |
+  -- |
+  -- The request could not get sent in the required amount of time.
+  RequestTimeoutReached Int
   deriving (Show, Read, Ord, Eq, Generic, Data, Typeable)
 
 adaptHandshakeFailure :: Protocol.HandshakeFailure -> Failure
@@ -264,10 +267,11 @@ adaptHandshakeFailure = \case
 adaptInteractionFailure :: Protocol.InteractionFailure -> Failure
 adaptInteractionFailure = \case
   Protocol.CorruptRequest t -> $bug $ "Server reports corrupt request: " <> t
-  Protocol.TimeoutReached -> $bug $ "A connection keepalive timeout reached"
+  Protocol.TimeoutReached t -> $bug $ "A connection keepalive timeout reached: " <> (packText . show) t
 
 adaptSessionFailure :: S.Failure -> Failure
 adaptSessionFailure = \case
   S.ConnectionInterrupted -> ConnectionInterrupted
-  S.TimeoutReached -> ResponseTimeoutReached
+  S.SendTimeoutReached t -> RequestTimeoutReached t
+  S.ReceiveTimeoutReached t -> ResponseTimeoutReached t
   S.CorruptData t -> $bug $ "Corrupt server response: " <> t

@@ -98,7 +98,8 @@ interact processRequest = do
     loop = do
       i <- catchError receive $ \e -> do
         case e of
-          S.TimeoutReached -> send $ Left $ P.TimeoutReached
+          S.ReceiveTimeoutReached t -> send $ Left $ P.TimeoutReached t
+          S.SendTimeoutReached t -> send $ Left $ P.TimeoutReached t
           S.CorruptData t -> send $ Left $ P.CorruptRequest t
           _ -> return ()
         throwError e

@@ -63,7 +63,7 @@ data InteractionFailure =
   CorruptRequest Text | 
   -- |
   -- A connection keepalive timeout reached.
-  TimeoutReached
+  TimeoutReached Int
   deriving (Show, Generic)
 
 instance Serializable m InteractionFailure
