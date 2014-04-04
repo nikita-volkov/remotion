@@ -59,21 +59,21 @@ timeout = 500 * 10 ^ 3
 serverSettings = (1, hostLM, timeout, 100)
 clientSettings = (1, hostURL)
 
-runServeT :: 
+runServer :: 
   (MonadIO m) => 
   (S.UserProtocolVersion, S.ListeningMode, S.Timeout, S.MaxClients) ->
-  S.ServeT m a -> 
+  S.Server m a -> 
   m (Either S.Failure a)
-runServeT (upv, lm, to, mc) t = do
+runServer (upv, lm, to, mc) t = do
   state <- liftIO $ newMVar 0
-  S.runServeT (settings state) t
+  S.runServer (settings state) t
   where
     settings state = (upv, lm, to, mc, logToConsole, processRequest state)
 
-runConnectionT :: 
+runClient :: 
   (MonadBaseControl IO m, MonadIO m) =>
-  C.Settings -> C.ConnectionT Request Response m a -> m (Either C.Failure a)
-runConnectionT = C.runConnectionT
+  C.Settings -> C.Client Request Response m a -> m (Either C.Failure a)
+runClient = C.runClient
 
 
 -- Tests
@@ -84,7 +84,7 @@ test_socketConnection = do
   forM_ [1..20] $ \n -> do
     traceIO $ "--- Attempt " <> show n <> " ---"
     assertEqual (Right $ Right $ Right 2) =<< do
-      runServeT serverSettings $ runConnectionT clientSettings $ do
+      runServer serverSettings $ runClient clientSettings $ do
         C.request $ Increase
         C.request $ Increase
         C.request $ Get
@@ -98,9 +98,9 @@ test_hostConnection = do
   forM_ [1..20] $ \n -> do
     traceIO $ "--- Attempt " <> show n <> " ---"
     assertEqual (Right $ Right $ Right 2) =<< do
-      runServeT serverSettings $ do
+      runServer serverSettings $ do
         traceIOWithTime $ "Running connection"
-        r <- runConnectionT clientSettings $ do
+        r <- runClient clientSettings $ do
           traceIOWithTime $ "Requesting"
           C.request $ Increase
           C.request $ Increase
@@ -116,36 +116,36 @@ test_hostConnection = do
 
 test_serverResourcesGetReleased = do
   assertEqual (Right ()) =<< do
-    runServeT serverSettings (return ())
-    runServeT serverSettings (return ())
+    runServer serverSettings (return ())
+    runServer serverSettings (return ())
   where
     serverSettings = (1, socketLM, timeout, 100)
 
 test_invalidCredentials = do
   assertEqual (Right $ Left $ C.Unauthenticated) =<< do
-    runServeT serverSettings $ runConnectionT clientSettings $ return ()
+    runServer serverSettings $ runClient clientSettings $ return ()
   where
     serverSettings = (1, hostLM, timeout, 100)
     clientSettings = (1, C.Host host port (Just "1"))
 
 test_noCredentials = do
   assertEqual (Right $ Left $ C.Unauthenticated) =<< do
-    runServeT serverSettings $ runConnectionT clientSettings $ return ()
+    runServer serverSettings $ runClient clientSettings $ return ()
   where
     serverSettings = (1, hostLM, timeout, 100)
     clientSettings = (1, C.Host host port Nothing)
 
 test_connectingToAnOfflineServer = do
   assertEqual (Left $ C.UnreachableURL) =<< do
-    runServeT serverSettings (return ())
-    runConnectionT clientSettings $ return ()
+    runServer serverSettings (return ())
+    runClient clientSettings $ return ()
   where
     serverSettings = (1, hostLM, timeout, 100)
     clientSettings = (1, hostURL)
 
 test_unmatchingUserProtocolVersions = do
   assertEqual (Right $ Left $ C.UserProtocolVersionMismatch 2 1) =<< do
-    runServeT serverSettings $ runConnectionT clientSettings $ return ()
+    runServer serverSettings $ runClient clientSettings $ return ()
   where
     serverSettings = (1, hostLM, timeout, 100)
     clientSettings = (2, hostURL)
@@ -156,11 +156,11 @@ test_requestAnOfflineServer = do
     traceIO $ "--- Attempt " <> show n <> " ---"
     assertEqual (Left $ C.ConnectionInterrupted) =<< do
       forkIO $ do
-        runServeT serverSettings $ do
+        runServer serverSettings $ do
           liftIO $ threadDelay $ 3*timeUnit
         return ()
       liftIO $ threadDelay $ 1*timeUnit
-      runConnectionT clientSettings $ do
+      runClient clientSettings $ do
         liftIO $ threadDelay $ 3*timeUnit
         C.request Increase
   traceIO "---"
@@ -171,24 +171,24 @@ test_requestAnOfflineServer = do
     clientSettings = (1, hostURL)
 
 test_clientConnectAcquiresASlot = do
-  runServeT serverSettings $ do
+  runServer serverSettings $ do
     slots <- S.countSlots
-    r <- runConnectionT clientSettings $ lift $ S.countSlots
+    r <- runClient clientSettings $ lift $ S.countSlots
     liftIO $ assertEqual (Right $ pred slots) r
   return () :: IO ()
 
 test_clientDisconnectReleasesASlot = do
-  runServeT serverSettings $ do
+  runServer serverSettings $ do
     slots <- S.countSlots
-    runConnectionT clientSettings $ return ()
+    runClient clientSettings $ return ()
     slots' <- S.countSlots
     liftIO $ assertEqual slots slots'
   return () :: IO ()
 
 test_keepalive = do
-  runServeT serverSettings $ do
+  runServer serverSettings $ do
     slots <- S.countSlots
-    As.async $ runConnectionT clientSettings $ liftIO $ threadDelay $ timeUnit * 3
+    As.async $ runClient clientSettings $ liftIO $ threadDelay $ timeUnit * 3
     liftIO $ threadDelay $ timeUnit * 2
     slots' <- S.countSlots
     liftIO $ assertEqual (slots - 1) slots'
@@ -200,22 +200,22 @@ test_keepalive = do
     clientSettings = (1, hostURL)
 
 test_multipleClients = do
-  runServeT serverSettings $ do
+  runServer serverSettings $ do
     updates <- do
       As.mapConcurrently id $ replicate 9 $ 
-        runConnectionT clientSettings $ C.request Increase
-    state <- runConnectionT clientSettings $ C.request Get
+        runClient clientSettings $ C.request Increase
+    state <- runClient clientSettings $ C.request Get
     liftIO $ do
       assertEqual (replicate 9 $ Right $ Left ()) updates
       assertEqual (Right $ Right $ 9) state
   return () :: IO ()
 
 test_highLoad = do
-  runServeT serverSettings $ do
+  runServer serverSettings $ do
     As.mapConcurrently id $ replicate 100 $ do
-      runConnectionT clientSettings $ do
+      runClient clientSettings $ do
         replicateM 100 $ C.request Increase
-    r <- runConnectionT clientSettings $ C.request Get
+    r <- runClient clientSettings $ C.request Get
     liftIO $ assertEqual (Right $ Right $ 100 * 100) $ r
   return () :: IO ()
   where
@@ -224,7 +224,7 @@ test_highLoad = do
 
 test_concurrentRequestsFromASingleClient = do
   assertEqual (Right $ Right $ Right $ 1000) =<< do
-    runServeT serverSettings $ runConnectionT clientSettings $ do
+    runServer serverSettings $ runClient clientSettings $ do
       void $ As.mapConcurrently id $ replicate 100 $ do
         replicateM_ 10 $ do
           C.request Increase
@@ -234,11 +234,11 @@ test_concurrentRequestsFromASingleClient = do
 
 test_tooManyConnections = do
   assertEqual (Right $ Left $ C.ServerIsBusy) =<< do
-    runServeT serverSettings $ do
-      a <- As.async $ runConnectionT clientSettings $ liftIO $ threadDelay $ 10^3*100
-      b <- As.async $ runConnectionT clientSettings $ liftIO $ threadDelay $ 10^3*100
+    runServer serverSettings $ do
+      a <- As.async $ runClient clientSettings $ liftIO $ threadDelay $ 10^3*100
+      b <- As.async $ runClient clientSettings $ liftIO $ threadDelay $ 10^3*100
       liftIO $ threadDelay $ 10^3*50
-      r <- runConnectionT clientSettings $ return ()
+      r <- runClient clientSettings $ return ()
       mapM_ As.wait [a, b]
       return r
   where
@@ -247,21 +247,21 @@ test_tooManyConnections = do
 
 test_lastConnectionSlot = do
   assertEqual (Right $ Right $ ()) =<< do
-    runServeT serverSettings $ do
-      a <- As.async $ runConnectionT clientSettings $ liftIO $ threadDelay $ 10^3*100
+    runServer serverSettings $ do
+      a <- As.async $ runClient clientSettings $ liftIO $ threadDelay $ 10^3*100
       liftIO $ threadDelay $ 10^3*50
-      (runConnectionT clientSettings $ return ()) <* As.wait a
+      (runClient clientSettings $ return ()) <* As.wait a
   where
     serverSettings = (1, hostLM, timeout, 2)
     clientSettings = (1, hostURL)
 
 test_multipleHittersOnTooManyConnectionsStillGetSurved = do
   assertEqual (Right $ replicate 10 $ Left $ C.ServerIsBusy) =<< do
-    runServeT serverSettings $ do
-      As.withAsync (runConnectionT clientSettings $ liftIO $ threadDelay $ 10^3*100) $ \_ -> 
-        As.withAsync (runConnectionT clientSettings $ liftIO $ threadDelay $ 10^3*100) $ \_ -> do
+    runServer serverSettings $ do
+      As.withAsync (runClient clientSettings $ liftIO $ threadDelay $ 10^3*100) $ \_ -> 
+        As.withAsync (runClient clientSettings $ liftIO $ threadDelay $ 10^3*100) $ \_ -> do
           liftIO $ threadDelay $ 10^3*50
-          As.mapConcurrently id $ replicate 10 $ runConnectionT clientSettings $ return ()
+          As.mapConcurrently id $ replicate 10 $ runClient clientSettings $ return ()
   where
     serverSettings = (1, hostLM, timeout, 2)
     clientSettings = (1, hostURL)
@@ -269,7 +269,7 @@ test_multipleHittersOnTooManyConnectionsStillGetSurved = do
 test_invalidClientRequests = do
   state <- newMVar 0
   assertEqual (Right $ Left $ C.CorruptRequest "Out of range") =<< do
-    S.runServeT (1, hostLM, timeout, 10, logToConsole, processRequest state) $ do
-      C.runConnectionT clientSettings $ do
-        C.request 'a' :: C.ConnectionT Char Int (S.ServeT IO) Int
+    S.runServer (1, hostLM, timeout, 10, logToConsole, processRequest state) $ do
+      C.runClient clientSettings $ do
+        C.request 'a' :: C.Client Char Int (S.Server IO) Int
 
