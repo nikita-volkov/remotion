@@ -49,7 +49,6 @@ library
     Remotion.Protocol
     Remotion.SessionT
     Remotion.Server.Connection
-    Remotion.Client.Sessions
     Remotion.Util.Forking
     Remotion.Util.IOBuffer
     Remotion.Util.FileSystem

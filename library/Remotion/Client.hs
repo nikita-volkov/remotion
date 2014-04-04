@@ -7,8 +7,8 @@ module Remotion.Client (
   -- * Settings
   Settings(..),
   URL(..),
-  Protocol.Credentials(..),
-  Protocol.UserProtocolVersion,
+  P.Credentials(..),
+  P.UserProtocolVersion,
   -- * Failure
   Failure(..),
 )
@@ -18,8 +18,7 @@ where
 import Remotion.Util.Prelude hiding (traceIO, traceIOWithTime, State, listen, interact)
 import qualified Remotion.Util.Prelude as Prelude
 import qualified Remotion.SessionT as S
-import qualified Remotion.Protocol as Protocol
-import qualified Remotion.Client.Sessions as Sessions
+import qualified Remotion.Protocol as P
 import qualified Control.Concurrent.Async.Lifted as A
 import qualified Control.Concurrent.Lock as Lock
 import qualified Network
@@ -62,7 +61,7 @@ type Lock = Lock.Lock
 
 -- |
 -- Settings of 'ConnectionT'.
-type Settings = (Protocol.UserProtocolVersion, URL)
+type Settings = (P.UserProtocolVersion, URL)
 
 -- |
 -- Location of the server.
@@ -70,7 +69,7 @@ data URL =
   -- | Path to the socket-file.
   Socket FilePath |
   -- | Host name, port and credentials.
-  Host Text Int Protocol.Credentials
+  Host Text Int P.Credentials
 
 instance MonadTrans (ConnectionT i o) where
   lift = ConnectionT . lift . lift . lift
@@ -116,26 +115,47 @@ runConnectionT (userProtocolVersion, url) t =
     lock <- liftIO $ Lock.new
     runInteraction socket timeout lock
   where
-    openSocket = openURLSocketIO url |> try |> liftIO >>= \case
-      Right r -> return r
-      Left e -> case ioeGetErrorType e of
-        NoSuchThing -> left $ UnreachableURL
-        _ -> $bug $ "Unexpected IOException: " <> (packText . show) e
+    openSocket = do
+      traceIOWithTime "Opening socket"
+      openURLSocketIO url |> try |> liftIO >>= \case
+        Right r -> return r
+        Left e -> case ioeGetErrorType e of
+          NoSuchThing -> left $ UnreachableURL
+          _ -> $bug $ "Unexpected IOException: " <> (packText . show) e
     closeSocket socket = do
       traceIOWithTime $ "Closing socket " <> show socket
       liftIO $ handle (const $ return () :: SomeException -> IO ()) $ hClose socket
     runHandshake socket =
+      traceIOWithTime "Handshaking" >>
       S.run session settings >>= 
       hoistEither . fmapL adaptSessionFailure >>= 
       hoistEither . fmapL adaptHandshakeFailure
       where
-        session = Sessions.handshake credentials userProtocolVersion
+        session = runEitherT $ do
+          do
+            receiveFailure
+          do
+            send P.version
+            receiveFailure
+          do
+            send userProtocolVersion
+            receiveFailure
+          do
+            send credentials
+            receiveFailure
+          do
+            send (0::Int)
+            receive
+          where
+            send = lift . S.send
+            receive = lift S.receive
+            receiveFailure = receive >>= maybe (return ()) left
         credentials = case url of
           Socket _ -> Nothing
           Host _ _ x -> x
         settings = (socket, 10^6*3)
     runInteraction socket timeout lock = do
-      traceIOWithTime $ "Interacting on socket " <> show socket
+      traceIOWithTime $ "Interacting"
       keepaliveState <- liftIO $ newMVar Nothing
       join $ fmap hoistEither $ lift $ runStack socket keepaliveState timeout lock $ do
         A.withAsync (finallyME (resetKeepalive *> t <* closeSession) stopKeepalive) $ \ta ->
@@ -202,7 +222,7 @@ resetKeepalive = do
 
 interact :: 
   (Serializable IO o, Serializable IO i, MonadIO m, Applicative m) =>
-  Protocol.Request i -> ConnectionT i o m (Maybe o)
+  P.Request i -> ConnectionT i o m (Maybe o)
 interact = \request -> do
   withLock $ send request >> receive >>= either (throwError . adaptInteractionFailure) return
   where
@@ -226,15 +246,16 @@ checkIn ::
   (Serializable IO i, Serializable IO o, MonadIO m, Applicative m) => 
   ConnectionT i o m ()
 checkIn = do 
+  traceIOWithTime "Performing keepalive request"
   resetKeepalive
-  interact Protocol.Keepalive >>= maybe (return ()) ($bug "Unexpected response")
+  interact P.Keepalive >>= maybe (return ()) ($bug "Unexpected response")
 
 closeSession ::
   (Serializable IO i, Serializable IO o, MonadIO m, Applicative m) => 
   ConnectionT i o m ()
 closeSession =
   traceIOWithTime "Closing session" >>
-  interact Protocol.CloseSession >>=
+  interact P.CloseSession >>=
   maybe (return ()) ($bug "Unexpected response") >>
   traceIOWithTime "Closed session"
 
@@ -245,7 +266,7 @@ request ::
   i -> ConnectionT i o m o
 request a = do
   resetKeepalive
-  interact (Protocol.UserRequest a) >>= maybe ($bug "Unexpected response") return
+  interact (P.UserRequest a) >>= maybe ($bug "Unexpected response") return
 
 
 -- Failure
@@ -280,17 +301,17 @@ data Failure =
   RequestTimeoutReached Int
   deriving (Show, Read, Ord, Eq, Generic, Data, Typeable)
 
-adaptHandshakeFailure :: Protocol.HandshakeFailure -> Failure
+adaptHandshakeFailure :: P.HandshakeFailure -> Failure
 adaptHandshakeFailure = \case
-  Protocol.ServerIsBusy -> ServerIsBusy
-  Protocol.ProtocolVersionMismatch c s -> ProtocolVersionMismatch c s
-  Protocol.UserProtocolVersionMismatch c s -> UserProtocolVersionMismatch c s
-  Protocol.Unauthenticated -> Unauthenticated
+  P.ServerIsBusy -> ServerIsBusy
+  P.ProtocolVersionMismatch c s -> ProtocolVersionMismatch c s
+  P.UserProtocolVersionMismatch c s -> UserProtocolVersionMismatch c s
+  P.Unauthenticated -> Unauthenticated
 
-adaptInteractionFailure :: Protocol.InteractionFailure -> Failure
+adaptInteractionFailure :: P.InteractionFailure -> Failure
 adaptInteractionFailure = \case
-  Protocol.CorruptRequest t -> $bug $ "Server reports corrupt request: " <> t
-  Protocol.TimeoutReached t -> $bug $ "A connection keepalive timeout reached: " <> (packText . show) t
+  P.CorruptRequest t -> $bug $ "Server reports corrupt request: " <> t
+  P.TimeoutReached t -> $bug $ "A connection keepalive timeout reached: " <> (packText . show) t
 
 adaptSessionFailure :: S.Failure -> Failure
 adaptSessionFailure = \case

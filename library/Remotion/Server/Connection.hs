@@ -61,6 +61,8 @@ handshake available authenticate timeout userVersion = runEitherT $ do
     ok <- liftIO $ authenticate $ credentials
     check (not ok) $ P.Unauthenticated
   do
+    0::Int <- receive -- A workaround for otherwise unpredictable behaviour,
+                      -- happening in case of multiple sends.
     send $ timeout
   where
     receive = lift $ S.receive
