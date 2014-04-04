@@ -3,7 +3,6 @@ module Remotion.Server
     -- * Control
     -- ** Monad-transformer
     Server,
-    Failure(..),
     run,
     wait,
     countSlots,
@@ -21,6 +20,8 @@ module Remotion.Server
     Log,
     C.ProcessUserRequest,
     C.State,
+    -- * Failure
+    Failure(..),
   )
   where
 
