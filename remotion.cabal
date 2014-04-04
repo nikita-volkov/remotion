@@ -50,7 +50,6 @@ library
     Remotion.SessionT
     Remotion.Server.Connection
     Remotion.Client.Sessions
-    Remotion.Client.InteractionT
     Remotion.Util.Forking
     Remotion.Util.IOBuffer
     Remotion.Util.FileSystem
