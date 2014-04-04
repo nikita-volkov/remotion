@@ -2,11 +2,25 @@
 module HTFTestSuite.CommunicationTests where
 
 import Test.Framework
-import HTFTestSuite.Prelude hiding (State, state)
+import HTFTestSuite.Prelude hiding (traceIO, traceIOWithTime, State, state)
+import qualified HTFTestSuite.Prelude as Prelude
 import qualified Remotion.Client as C
 import qualified Remotion.Server as S
 import qualified Control.Concurrent.Async.Lifted as As
 
+
+-- Debugging
+-------------------------
+-- The following functions get enabled during debugging.
+
+debugging = False
+prefix = id
+traceIO = if debugging 
+  then Prelude.traceIO . prefix 
+  else const $ return ()
+traceIOWithTime = if debugging 
+  then Prelude.traceIOWithTime . prefix 
+  else const $ return ()
 
 -- Setup
 -------------------------

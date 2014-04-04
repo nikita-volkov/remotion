@@ -29,7 +29,7 @@ import qualified Remotion.Util.FileSystem as FS
 -------------------------
 -- The following functions get enabled during debugging.
 
-debugging = True
+debugging = False
 prefix = ("Client: " <>)
 traceIO = if debugging 
   then Prelude.traceIO . prefix 
@@ -191,7 +191,6 @@ stopKeepalive = do
   traceIOWithTime "Stopping keepalive"
   (state, _, _) <- ConnectionT $ ask
   liftIO $ modifyMVar_ state $ const $ return Nothing
-  traceIOWithTime "Stopped keepalive"
 
 keepaliveLoop :: 
   (Applicative m, MonadIO m, Serializable IO o, Serializable IO i) => 
@@ -234,12 +233,10 @@ interact = \request -> do
         unlock = ConnectionT . liftIO . Lock.release
     send r = 
       traceIOWithTime "Sending" *>
-      (liftSessionT $ S.send r) <*
-      traceIOWithTime "Sent"
+      (liftSessionT $ S.send r)
     receive = 
       traceIOWithTime "Receiving" *>
-      liftSessionT S.receive <*
-      traceIOWithTime "Received"
+      liftSessionT S.receive
 
 checkIn :: 
   (Serializable IO i, Serializable IO o, MonadIO m, Applicative m) => 
@@ -255,8 +252,7 @@ closeSession ::
 closeSession =
   traceIOWithTime "Closing session" >>
   interact P.CloseSession >>=
-  maybe (return ()) ($bug "Unexpected response") >>
-  traceIOWithTime "Closed session"
+  maybe (return ()) ($bug "Unexpected response")
 
 -- |
 -- Send a request @i@ and receive a response @o@.
