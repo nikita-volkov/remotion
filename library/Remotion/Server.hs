@@ -4,7 +4,7 @@ module Remotion.Server
     -- ** Monad-transformer
     Server,
     Failure,
-    runServer,
+    run,
     wait,
     countSlots,
     -- ** Simple
@@ -93,10 +93,10 @@ data Failure =
 
 -- |
 -- Run the server, while automatically managing all related resources.
-runServer :: 
+run :: 
   (Serializable IO i, Serializable IO o, MonadIO m) => 
   Settings i o s -> Server m a -> m (Either Failure a)
-runServer (userVersion, listeningMode, timeout, maxClients, log, processRequest) m = runEitherT $ do
+run (userVersion, listeningMode, timeout, maxClients, log, processRequest) m = runEitherT $ do
 
   let (portID, auth) = case listeningMode of
         Host port auth -> (Network.PortNumber $ fromIntegral port, auth)
@@ -175,7 +175,7 @@ countSlots = Server $ ask >>= \(_, x) -> liftIO $ x
 -- |
 -- Run the server, while blocking the calling thread.
 runAndWait :: (Serializable IO i, Serializable IO o) => Settings i o s -> IO (Either Failure ())
-runAndWait settings = runServer settings $ wait
+runAndWait settings = run settings $ wait
 
 
 -- "monad-control" instances

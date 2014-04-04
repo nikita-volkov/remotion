@@ -66,14 +66,14 @@ runServer ::
   m (Either S.Failure a)
 runServer (upv, lm, to, mc) t = do
   state <- liftIO $ newMVar 0
-  S.runServer (settings state) t
+  S.run (settings state) t
   where
     settings state = (upv, lm, to, mc, logToConsole, processRequest state)
 
 runClient :: 
   (MonadBaseControl IO m, MonadIO m) =>
   C.Settings -> C.Client Request Response m a -> m (Either C.Failure a)
-runClient = C.runClient
+runClient = C.run
 
 
 -- Tests
@@ -269,7 +269,7 @@ test_multipleHittersOnTooManyConnectionsStillGetSurved = do
 test_invalidClientRequests = do
   state <- newMVar 0
   assertEqual (Right $ Left $ C.CorruptRequest "Out of range") =<< do
-    S.runServer (1, hostLM, timeout, 10, logToConsole, processRequest state) $ do
-      C.runClient clientSettings $ do
+    S.run (1, hostLM, timeout, 10, logToConsole, processRequest state) $ do
+      C.run clientSettings $ do
         C.request 'a' :: C.Client Char Int (S.Server IO) Int
 

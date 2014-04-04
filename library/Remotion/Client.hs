@@ -2,7 +2,7 @@
 module Remotion.Client (
   -- * Control
   Client,
-  runClient,
+  run,
   request,
   -- * Settings
   Settings(..),
@@ -104,12 +104,12 @@ liftSession s = Client $ lift $ do
 -- Run 'Client' in the base monad.
 -- 
 -- Requires the base monad to have a 'MonadBaseControl' instance for 'IO'.
-runClient :: 
+run :: 
   forall i o m r.
   (Serializable IO i, Serializable IO o, MonadIO m, Applicative m,
    MonadBaseControl IO m) => 
   Settings -> Client i o m r -> m (Either Failure r)
-runClient (userProtocolVersion, url) t = 
+run (userProtocolVersion, url) t = 
   runEitherT $ bracketME openSocket closeSocket $ \socket -> do
     timeout <- runHandshake socket
     lock <- liftIO $ Lock.new
