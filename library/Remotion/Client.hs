@@ -222,7 +222,7 @@ interact ::
   (Serializable IO o, Serializable IO i, MonadIO m, Applicative m) =>
   P.Request i -> ConnectionT i o m (Maybe o)
 interact = \request -> do
-  withLock $ send request >> receive >>= either (throwError . adaptInteractionFailure) return
+  withLock $ send request >> receive >>= either (\f -> throwError $! adaptInteractionFailure f) return
   where
     withLock action = do
       (_, _, l) <- ConnectionT ask
@@ -293,7 +293,10 @@ data Failure =
   ResponseTimeoutReached Int |
   -- |
   -- The request could not get sent in the required amount of time.
-  RequestTimeoutReached Int
+  RequestTimeoutReached Int |
+  -- |
+  -- Server reports corrupt request.
+  CorruptRequest Text
   deriving (Show, Read, Ord, Eq, Generic, Data, Typeable)
 
 adaptHandshakeFailure :: P.HandshakeFailure -> Failure
@@ -305,7 +308,7 @@ adaptHandshakeFailure = \case
 
 adaptInteractionFailure :: P.InteractionFailure -> Failure
 adaptInteractionFailure = \case
-  P.CorruptRequest t -> $bug $ "Server reports corrupt request: " <> t
+  P.CorruptRequest t -> CorruptRequest t
   P.TimeoutReached t -> $bug $ "A connection keepalive timeout reached: " <> (packText . show) t
 
 adaptSessionFailure :: S.Failure -> Failure

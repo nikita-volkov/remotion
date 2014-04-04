@@ -170,8 +170,6 @@ test_requestAnOfflineServer = do
     serverSettings = (1, hostLM, timeout, 100)
     clientSettings = (1, hostURL)
 
-test_invalidClientRequests = unitTestPending ""
-
 test_clientConnectAcquiresASlot = do
   runServeT serverSettings $ do
     slots <- S.countSlots
@@ -268,4 +266,10 @@ test_multipleHittersOnTooManyConnectionsStillGetSurved = do
     serverSettings = (1, hostLM, timeout, 2)
     clientSettings = (1, hostURL)
 
+test_invalidClientRequests = do
+  state <- newMVar 0
+  assertEqual (Right $ Left $ C.CorruptRequest "Out of range") =<< do
+    S.runServeT (1, hostLM, timeout, 10, logToConsole, processRequest state) $ do
+      C.runConnectionT clientSettings $ do
+        C.request 'a' :: C.ConnectionT Char Int (S.ServeT IO) Int
 
