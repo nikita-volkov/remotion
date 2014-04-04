@@ -29,7 +29,7 @@ processRequest state clientState = \case
   Divide by -> modifyMVar_ state (pure . (/by)) >> return (Left ())
   Get -> readMVar state |$> Right
 
-logToConsole = traceM . unpackText . ("Server: " <>)
+logToConsole = traceIOWithTime . ("Server: " <>) . unpackText
 dontLog = void . return
 socket = dir <> ".socket"
 socketURL = C.Socket socket
@@ -66,21 +66,36 @@ runConnectionT = C.runConnectionT
 -------------------------
 
 test_socketConnection = do
-  assertEqual (Right $ Right $ Right 2) =<< do
-    runServeT serverSettings $ runConnectionT clientSettings $ do
-      C.request $ Increase
-      C.request $ Increase
-      C.request $ Get
+  traceIO "--- \"socketConnection\" log ---"
+  forM_ [1..20] $ \n -> do
+    traceIO $ "--- Attempt " <> show n <> " ---"
+    assertEqual (Right $ Right $ Right 2) =<< do
+      runServeT serverSettings $ runConnectionT clientSettings $ do
+        C.request $ Increase
+        C.request $ Increase
+        C.request $ Get
+  traceIO "---"
   where
     serverSettings = (1, socketLM, timeout, 100)
     clientSettings = (1, socketURL)
 
 test_hostConnection = do
-  assertEqual (Right $ Right $ Right 2) =<< do
-    runServeT serverSettings $ runConnectionT clientSettings $ do
-      C.request $ Increase
-      C.request $ Increase
-      C.request $ Get
+  traceIO "--- \"hostConnection\" log ---"
+  forM_ [1..20] $ \n -> do
+    traceIO $ "--- Attempt " <> show n <> " ---"
+    assertEqual (Right $ Right $ Right 2) =<< do
+      runServeT serverSettings $ do
+        traceIOWithTime $ "Running connection"
+        r <- runConnectionT clientSettings $ do
+          traceIOWithTime $ "Requesting"
+          C.request $ Increase
+          C.request $ Increase
+          r <- C.request $ Get
+          traceIOWithTime $ "Finishing connection"
+          return r
+        traceIOWithTime $ "Finishing server"
+        return r
+  traceIO "---"
   where
     serverSettings = (1, hostLM, timeout, 100)
     clientSettings = (1, hostURL)
@@ -124,15 +139,24 @@ test_unmatchingUserProtocolVersions = do
     clientSettings = (2, hostURL)
 
 test_requestAnOfflineServer = do
-  assertEqual (Left $ C.ConnectionInterrupted) =<< do
-    forkIO $ do
-      runServeT serverSettings $ do
-        liftIO $ threadDelay $ 10^3*500
-      return ()
-    liftIO $ threadDelay $ 10^3*100
-    runConnectionT clientSettings $ do
-      liftIO $ threadDelay $ 10^3*500
-      C.request Increase
+  traceIO "--- \"requestAnOfflineServer\" log ---"
+  forM_ [1..10] $ \n -> do
+    traceIO $ "--- Attempt " <> show n <> " ---"
+    assertEqual (Left $ C.ConnectionInterrupted) =<< do
+      forkIO $ do
+        runServeT serverSettings $ do
+          liftIO $ threadDelay $ 3*timeUnit
+        return ()
+      liftIO $ threadDelay $ 1*timeUnit
+      runConnectionT clientSettings $ do
+        liftIO $ threadDelay $ 3*timeUnit
+        C.request Increase
+  traceIO "---"
+  where
+    timeUnit = 10^5
+    timeout = 3*timeUnit
+    serverSettings = (1, hostLM, timeout, 100)
+    clientSettings = (1, hostURL)
 
 test_invalidClientRequests = unitTestPending ""
 
@@ -160,7 +184,7 @@ test_keepalive = do
     liftIO $ assertEqual (slots - 1) slots'
   return () :: IO ()
   where
-    timeUnit = 10^3
+    timeUnit = 10^5
     timeout = timeUnit * 1
     serverSettings = (1, hostLM, timeout, 100)
     clientSettings = (1, hostURL)
