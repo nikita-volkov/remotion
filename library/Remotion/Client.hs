@@ -59,6 +59,11 @@ data URL =
 instance MonadTrans (ConnectionT i o) where
   lift = ConnectionT . lift . lift . lift
 
+liftSessionT :: (Monad m) => S.SessionT m a -> ConnectionT i o m a
+liftSessionT s = ConnectionT $ lift $ do
+  r <- lift $ catchError (liftM Right $ s) (return . Left . adaptSessionFailure)
+  hoistEither r
+
 
 -- |
 -- Run 'ConnectionT' in the base monad.
@@ -175,8 +180,8 @@ interact = \request ->
       where
         lock = ConnectionT . liftIO . Lock.acquire
         unlock = ConnectionT . liftIO . Lock.release
-    send r = ConnectionT $ lift $ lift $ S.send r
-    receive = ConnectionT $ lift $ lift $ S.receive
+    send r = liftSessionT $ S.send r
+    receive = liftSessionT $ S.receive
 
 checkIn :: 
   (Serializable IO i, Serializable IO o, MonadIO m, Applicative m) => 
