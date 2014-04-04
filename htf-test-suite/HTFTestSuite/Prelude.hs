@@ -7,6 +7,7 @@ module HTFTestSuite.Prelude
 
     (?:),
     traceM,
+    traceIO,
     packText,
     unpackText,
     bug,
@@ -56,7 +57,7 @@ import Unsafe.Coerce as Exports
 import GHC.Exts as Exports hiding (traceEvent)
 import GHC.Generics as Exports (Generic)
 import GHC.IO.Exception as Exports
-import Debug.Trace as Exports
+import Debug.Trace as Exports hiding (traceIO)
 import Data.IORef as Exports
 import Data.STRef as Exports
 import Control.Monad.ST as Exports
@@ -140,6 +141,7 @@ import qualified Data.ByteString.Lazy
 import qualified Data.Text.Lazy
 import qualified Data.Text
 import qualified Prelude
+import qualified Debug.Trace
 
 
 type LazyByteString = Data.ByteString.Lazy.ByteString
@@ -152,6 +154,9 @@ maybeA ?: b = fromMaybe b maybeA
 
 traceM :: (Monad m) => String -> m ()
 traceM s = trace s $ return ()
+
+traceIO :: (MonadIO m) => String -> m ()
+traceIO = liftIO . Debug.Trace.traceIO
 
 packText = Data.Text.pack
 unpackText = Data.Text.unpack
