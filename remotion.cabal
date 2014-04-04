@@ -47,7 +47,7 @@ library
     library
   other-modules:
     Remotion.Protocol
-    Remotion.SessionT
+    Remotion.Session
     Remotion.Server.Connection
     Remotion.Util.FileSystem
     Remotion.Util.Prelude

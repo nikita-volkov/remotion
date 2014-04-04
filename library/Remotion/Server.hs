@@ -2,9 +2,9 @@ module Remotion.Server
   (
     -- * Control
     -- ** Monad-transformer
-    ServeT,
+    Server,
     Failure(..),
-    runServeT,
+    run,
     wait,
     countSlots,
     -- ** Simple
@@ -75,15 +75,15 @@ type Log = Text -> IO ()
 
 -- |
 -- A monad transformer, which runs the server in the background.
-newtype ServeT m a = 
-  ServeT { unServeT :: ReaderT (Wait, CountSlots) m a }
+newtype Server m a = 
+  Server { unServer :: ReaderT (Wait, CountSlots) m a }
   deriving (Functor, Applicative, Monad, MonadIO, MonadTrans)
 
 type Wait = IO ()
 type CountSlots = IO Int
 
 -- |
--- A ServeT failure.
+-- A Server failure.
 data Failure =
   ListeningSocketIsBusy
   -- -- FIXME: implement the following
@@ -93,10 +93,10 @@ data Failure =
 
 -- |
 -- Run the server, while automatically managing all related resources.
-runServeT :: 
+run :: 
   (Serializable IO i, Serializable IO o, MonadIO m) => 
-  Settings i o s -> ServeT m a -> m (Either Failure a)
-runServeT (userVersion, listeningMode, timeout, maxClients, log, processRequest) m = runEitherT $ do
+  Settings i o s -> Server m a -> m (Either Failure a)
+run (userVersion, listeningMode, timeout, maxClients, log, processRequest) m = runEitherT $ do
 
   let (portID, auth) = case listeningMode of
         Host port auth -> (Network.PortNumber $ fromIntegral port, auth)
@@ -160,41 +160,41 @@ runServeT (userVersion, listeningMode, timeout, maxClients, log, processRequest)
       log $ "Stopped server"
     countSlots = readMVar slotsVar
 
-  r <- lift $ runReaderT (unServeT m) (wait, countSlots) 
+  r <- lift $ runReaderT (unServer m) (wait, countSlots) 
   liftIO stop
   return r
 
 -- | Block until the server stops due to an error.
-wait :: (MonadIO m) => ServeT m ()
-wait = ServeT $ ask >>= \(x, _) -> liftIO $ x
+wait :: (MonadIO m) => Server m ()
+wait = Server $ ask >>= \(x, _) -> liftIO $ x
 
 -- | Count the currently available slots for new connections.
-countSlots :: (MonadIO m) => ServeT m Int
-countSlots = ServeT $ ask >>= \(_, x) -> liftIO $ x
+countSlots :: (MonadIO m) => Server m Int
+countSlots = Server $ ask >>= \(_, x) -> liftIO $ x
 
 -- |
 -- Run the server, while blocking the calling thread.
 runAndWait :: (Serializable IO i, Serializable IO o) => Settings i o s -> IO (Either Failure ())
-runAndWait settings = runServeT settings $ wait
+runAndWait settings = run settings $ wait
 
 
 -- "monad-control" instances
 -------------------------
 
-instance MonadBase IO m => MonadBase IO (ServeT m) where
-  liftBase = ServeT . liftBase
+instance MonadBase IO m => MonadBase IO (Server m) where
+  liftBase = Server . liftBase
 
-instance MonadTransControl ServeT where
-  newtype StT ServeT a = StT { unStT :: a }
+instance MonadTransControl Server where
+  newtype StT Server a = StT { unStT :: a }
   liftWith runToM = do
-    wait <- ServeT $ ask
-    ServeT $ lift $ runToM $ liftM StT . flip runReaderT wait . unServeT
+    wait <- Server $ ask
+    Server $ lift $ runToM $ liftM StT . flip runReaderT wait . unServer
   restoreT m = do
-    StT r <- ServeT $ lift $ m
+    StT r <- Server $ lift $ m
     return r
     
-instance (MonadBaseControl IO m) => MonadBaseControl IO (ServeT m) where
-  newtype StM (ServeT m) a = StMT { unStMT :: ComposeSt ServeT m a }
+instance (MonadBaseControl IO m) => MonadBaseControl IO (Server m) where
+  newtype StM (Server m) a = StMT { unStMT :: ComposeSt Server m a }
   liftBaseWith = defaultLiftBaseWith StMT
   restoreM = defaultRestoreM unStMT
 
