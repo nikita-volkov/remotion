@@ -226,3 +226,12 @@ test_highLoad = do
     serverSettings = (1, hostLM, timeout, 110)
     clientSettings = (1, hostURL)
 
+test_concurrentRequestsFromASingleClient = do
+  assertEqual (Right $ Right $ Right $ 1000) =<< do
+    runServeT serverSettings $ runConnectionT clientSettings $ do
+      void $ As.mapConcurrently id $ replicate 100 $ do
+        replicateM_ 10 $ do
+          C.request Increase
+          C.request Increase
+          C.request Decrease
+      C.request Get 
