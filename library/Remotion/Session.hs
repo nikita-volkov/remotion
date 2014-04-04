@@ -1,4 +1,4 @@
-module Remotion.SessionT where
+module Remotion.Session where
 
 import Remotion.Util.Prelude
 import qualified Network.Socket
@@ -11,8 +11,8 @@ import qualified Control.Exception as Ex
 -- | 
 -- An abstraction over networking and data transmission.
 -- Can be used in implementation of both the server and the client.
-newtype SessionT m r = 
-  SessionT { unSessionT :: ReaderT Settings (EitherT Failure m) r }
+newtype Session m r = 
+  Session { unSession :: ReaderT Settings (EitherT Failure m) r }
   deriving (Functor, Applicative, Monad, MonadIO, MonadReader Settings, MonadError Failure)
 
 type Settings = (Socket, Timeout)
@@ -33,8 +33,8 @@ data Failure =
   deriving (Show)
 
 
-run :: SessionT m r -> Settings -> m (Either Failure r)
-run (SessionT t) settings = runReaderT t settings |> runEitherT
+run :: Session m r -> Settings -> m (Either Failure r)
+run (Session t) settings = runReaderT t settings |> runEitherT
 
 adaptIOException :: IOException -> Failure
 adaptIOException e = ioeGetErrorType e |> \case
@@ -46,8 +46,8 @@ adaptException e = if
   | Just ioe <- fromException e -> adaptIOException ioe
   | otherwise -> $bug $ "Unexpected exception: " <> packText (show e)
 
-receive :: (Serializable IO i, MonadIO m) => SessionT m i
-receive = SessionT $ do
+receive :: (Serializable IO i, MonadIO m) => Session m i
+receive = Session $ do
   (handle, timeout) <- ask
   let pipe = PipesByteString.fromHandle handle >-> deserializingPipe
   pipe |> PipesPrelude.head |> runEitherT |> Ex.try |> Timeout.timeout timeout |> liftIO >>= \case
@@ -57,8 +57,8 @@ receive = SessionT $ do
     Just (Left e) -> throwError $ adaptIOException e
     Nothing -> throwError $ ReceiveTimeoutReached timeout
   
-send :: (Serializable IO o, MonadIO m, Applicative m) => o -> SessionT m ()
-send a = SessionT $ do
+send :: (Serializable IO o, MonadIO m, Applicative m) => o -> Session m ()
+send a = Session $ do
   (handle, timeout) <- ask
   let pipe = serializingProducer a >-> PipesByteString.toHandle handle
   lift $ do
@@ -66,22 +66,22 @@ send a = SessionT $ do
     failWith (SendTimeoutReached timeout) tr
 
 
-instance MonadTrans SessionT where
-  lift = SessionT . lift . lift
+instance MonadTrans Session where
+  lift = Session . lift . lift
 
-instance (MonadBase IO m) => MonadBase IO (SessionT m) where
-  liftBase = SessionT . liftBase
+instance (MonadBase IO m) => MonadBase IO (Session m) where
+  liftBase = Session . liftBase
 
-instance MonadTransControl SessionT where
-  newtype StT SessionT a = StT { unStT :: Either Failure a }
+instance MonadTransControl Session where
+  newtype StT Session a = StT { unStT :: Either Failure a }
   liftWith runToBase = do
-    settings <- SessionT $ ask
-    SessionT $ lift $ lift $ runToBase $ liftM StT . flip run settings
+    settings <- Session $ ask
+    Session $ lift $ lift $ runToBase $ liftM StT . flip run settings
   restoreT base = do
-    StT r <- SessionT $ lift $ lift $ base
-    SessionT $ lift $ hoistEither r
+    StT r <- Session $ lift $ lift $ base
+    Session $ lift $ hoistEither r
 
-instance (MonadBaseControl IO m) => MonadBaseControl IO (SessionT m) where
-  newtype StM (SessionT m) a = StMT { unStMT :: ComposeSt SessionT m a }
+instance (MonadBaseControl IO m) => MonadBaseControl IO (Session m) where
+  newtype StM (Session m) a = StMT { unStMT :: ComposeSt Session m a }
   liftBaseWith = defaultLiftBaseWith StMT
   restoreM = defaultRestoreM unStMT

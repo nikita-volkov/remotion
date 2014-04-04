@@ -2,7 +2,7 @@ module Remotion.Server.Connection where
 
 import Remotion.Util.Prelude hiding (State, listen, interact)
 import qualified Remotion.Protocol as P
-import qualified Remotion.SessionT as S
+import qualified Remotion.Session as S
 
 
 runConnection :: 
@@ -46,7 +46,7 @@ handshake ::
   Authenticate ->
   P.Timeout ->
   P.UserProtocolVersion ->
-  S.SessionT m (Either P.HandshakeFailure ())
+  S.Session m (Either P.HandshakeFailure ())
 handshake available authenticate timeout userVersion = runEitherT $ do
   do
     check (not available) $ P.ServerIsBusy
@@ -93,7 +93,7 @@ type State s = IORef (Maybe s)
 interact :: 
   forall i o s m. 
   (MonadIO m, Serializable IO i, Serializable IO o, Applicative m) =>
-  ProcessUserRequest i o s -> S.SessionT m ()
+  ProcessUserRequest i o s -> S.Session m ()
 interact processRequest = do
   state <- liftIO $ newIORef Nothing
   let 
@@ -117,6 +117,6 @@ interact processRequest = do
           loop
   loop
   where
-    receive = S.receive :: S.SessionT m (P.Request i)
-    send = S.send :: P.Response o -> S.SessionT m ()
+    receive = S.receive :: S.Session m (P.Request i)
+    send = S.send :: P.Response o -> S.Session m ()
 

@@ -17,7 +17,7 @@ where
 
 import Remotion.Util.Prelude hiding (traceIO, traceIOWithTime, State, listen, interact)
 import qualified Remotion.Util.Prelude as Prelude
-import qualified Remotion.SessionT as S
+import qualified Remotion.Session as S
 import qualified Remotion.Protocol as P
 import qualified Control.Concurrent.Async.Lifted as A
 import qualified Control.Concurrent.Lock as Lock
@@ -46,7 +46,7 @@ traceIOWithTime = if debugging
 -- Supports custom protocols with @i@ being the type of the client request and
 -- @o@ - the server's response.
 newtype ConnectionT i o m r = 
-  ConnectionT { unConnectionT :: ReaderT Env (EitherT Failure (S.SessionT m)) r }
+  ConnectionT { unConnectionT :: ReaderT Env (EitherT Failure (S.Session m)) r }
   deriving (Functor, Applicative, Monad, MonadIO, MonadError Failure)
 
 type Env = (KeepaliveState, KeepaliveTimeout, Lock)
@@ -78,11 +78,11 @@ instance (MonadBase IO m) => MonadBase IO (ConnectionT i o m) where
   liftBase = ConnectionT . liftBase
 
 instance MonadTransControl (ConnectionT i o) where
-  newtype StT (ConnectionT i o) a = StT (StT S.SessionT (Either Failure a))
+  newtype StT (ConnectionT i o) a = StT (StT S.Session (Either Failure a))
   liftWith runInM = do
     env <- ConnectionT $ ask
-    ConnectionT $ lift $ lift $ liftWith $ \runSessionT -> runInM $ 
-      liftM StT . runSessionT . runEitherT . flip runReaderT env . unConnectionT
+    ConnectionT $ lift $ lift $ liftWith $ \runSession -> runInM $ 
+      liftM StT . runSession . runEitherT . flip runReaderT env . unConnectionT
   restoreT m = do
     r <- ConnectionT $ lift $ lift $ do
       StT r <- lift m
@@ -94,8 +94,8 @@ instance (MonadBaseControl IO m) => MonadBaseControl IO (ConnectionT i o m) wher
   liftBaseWith = defaultLiftBaseWith StMT
   restoreM = defaultRestoreM unStMT
 
-liftSessionT :: (Monad m) => S.SessionT m a -> ConnectionT i o m a
-liftSessionT s = ConnectionT $ lift $ do
+liftSession :: (Monad m) => S.Session m a -> ConnectionT i o m a
+liftSession s = ConnectionT $ lift $ do
   r <- lift $ catchError (liftM Right $ s) (return . Left . adaptSessionFailure)
   hoistEither r
 
@@ -233,10 +233,10 @@ interact = \request -> do
         unlock = ConnectionT . liftIO . Lock.release
     send r = 
       traceIOWithTime "Sending" *>
-      (liftSessionT $ S.send r)
+      (liftSession $ S.send r)
     receive = 
       traceIOWithTime "Receiving" *>
-      liftSessionT S.receive
+      liftSession S.receive
 
 checkIn :: 
   (Serializable IO i, Serializable IO o, MonadIO m, Applicative m) => 
