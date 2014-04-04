@@ -59,6 +59,26 @@ data URL =
 instance MonadTrans (ConnectionT i o) where
   lift = ConnectionT . lift . lift . lift
 
+instance (MonadBase IO m) => MonadBase IO (ConnectionT i o m) where
+  liftBase = ConnectionT . liftBase
+
+instance MonadTransControl (ConnectionT i o) where
+  newtype StT (ConnectionT i o) a = StT (StT S.SessionT (Either Failure a))
+  liftWith runInM = do
+    env <- ConnectionT $ ask
+    ConnectionT $ lift $ lift $ liftWith $ \runSessionT -> runInM $ 
+      liftM StT . runSessionT . runEitherT . flip runReaderT env . unConnectionT
+  restoreT m = do
+    r <- ConnectionT $ lift $ lift $ do
+      StT r <- lift m
+      restoreT $ return $ r
+    either throwError return r
+
+instance (MonadBaseControl IO m) => MonadBaseControl IO (ConnectionT i o m) where
+  newtype StM (ConnectionT i o m) a = StMT { unStMT :: ComposeSt (ConnectionT i o) m a }
+  liftBaseWith = defaultLiftBaseWith StMT
+  restoreM = defaultRestoreM unStMT
+
 liftSessionT :: (Monad m) => S.SessionT m a -> ConnectionT i o m a
 liftSessionT s = ConnectionT $ lift $ do
   r <- lift $ catchError (liftM Right $ s) (return . Left . adaptSessionFailure)
@@ -101,12 +121,10 @@ runConnectionT (userProtocolVersion, url) t =
         settings = (socket, 10^6*1)
     runInteraction socket timeout lock = do
       keepaliveState <- liftIO $ newMVar =<< Just <$> getCurrentTime
-      let
-        run :: forall r. ConnectionT i o m r -> EitherT Failure m r
-        run = join . fmap hoistEither . lift . runStack socket keepaliveState timeout lock
-      A.withAsync (finallyME (run $ t <* closeSession) (run $ stopKeepalive)) $ \ta ->
-        A.withAsync (run $ keepaliveLoop) $ \ka -> do
-          A.waitBoth ta ka >>= \(tr, kr) -> return tr
+      join $ fmap hoistEither $ lift $ runStack socket keepaliveState timeout lock $ do
+        A.withAsync (finallyME (t <* closeSession) stopKeepalive) $ \ta ->
+          A.withAsync (keepaliveLoop) $ \ka -> do
+            A.waitBoth ta ka >>= \(tr, kr) -> return tr
 
 runStack :: 
   (MonadIO m) =>
