@@ -136,21 +136,24 @@ runConnectionT (userProtocolVersion, url) t =
         settings = (socket, 10^6*3)
     runInteraction socket timeout lock = do
       traceIOWithTime $ "Interacting on socket " <> show socket
-      keepaliveState <- liftIO $ newMVar =<< Just <$> getCurrentTime
+      keepaliveState <- liftIO $ newMVar Nothing
       join $ fmap hoistEither $ lift $ runStack socket keepaliveState timeout lock $ do
-        A.withAsync (finallyME (t <* closeSession) stopKeepalive) $ \ta ->
+        A.withAsync (finallyME (resetKeepalive *> t <* closeSession) stopKeepalive) $ \ta ->
           A.withAsync (keepaliveLoop) $ \ka -> do
             A.waitBoth ta ka >>= \(tr, kr) -> return tr
 
 runStack :: 
   (MonadIO m) =>
   S.Socket -> KeepaliveState -> KeepaliveTimeout -> Lock -> ConnectionT i o m r -> m (Either Failure r)
-runStack socket keepaliveState timeout lock t =
-  unConnectionT t |>
-  flip runReaderT (keepaliveState, timeout, lock) |>
-  runEitherT |>
-  flip S.run (socket, 10^6*30) |>
-  liftM (join . fmapL adaptSessionFailure)
+runStack socket keepaliveState keepaliveTimeout lock t =
+  if keepaliveTimeout < 10^3*100
+    then error $ "Too small keepalive timeout setting: " <> show keepaliveTimeout
+    else
+      unConnectionT t |>
+      flip runReaderT (keepaliveState, keepaliveTimeout, lock) |>
+      runEitherT |>
+      flip S.run (socket, 10^6*30) |>
+      liftM (join . fmapL adaptSessionFailure)
 
 openURLSocketIO :: URL -> IO Handle
 openURLSocketIO = \case
@@ -174,19 +177,13 @@ keepaliveLoop ::
   (Applicative m, MonadIO m, Serializable IO o, Serializable IO i) => 
   ConnectionT i o m ()
 keepaliveLoop = do
-  (state, timeout, _) <- ConnectionT $ ask
-  let loweredTimeout = (floor . reduceTimeout . fromIntegral) timeout
+  (state, _, _) <- ConnectionT $ ask
   (liftIO $ readMVar state) >>= \case
     Nothing -> return ()
-    Just lastTime -> do
-      let nextTime = microsToDiff loweredTimeout `addUTCTime` lastTime
+    Just nextTime -> do
       currentTime <- liftIO $ getCurrentTime
-      if currentTime < nextTime
-        then do
-          liftIO $ threadDelay $ diffToMicros $ nextTime `diffUTCTime` currentTime
-        else do
-          checkIn
-          liftIO $ threadDelay $ fromIntegral $ loweredTimeout
+      when (currentTime >= nextTime) $ checkIn
+      liftIO $ threadDelay $ 10^3 * 10
       keepaliveLoop
 
 reduceTimeout :: Double -> Double
@@ -197,9 +194,11 @@ reduceTimeout = curve 1 2
 resetKeepalive :: (MonadIO m) => ConnectionT i o m ()
 resetKeepalive = do
   (state, timeout, _) <- ConnectionT $ ask
+  let loweredTimeout = (floor . reduceTimeout . fromIntegral) timeout
   liftIO $ do
     time <- getCurrentTime
-    modifyMVar_ state $ const $ return $ Just time
+    modifyMVar_ state $ const $ return $ Just $
+      microsToDiff loweredTimeout `addUTCTime` time
 
 interact :: 
   (Serializable IO o, Serializable IO i, MonadIO m, Applicative m) =>
@@ -226,9 +225,9 @@ interact = \request -> do
 checkIn :: 
   (Serializable IO i, Serializable IO o, MonadIO m, Applicative m) => 
   ConnectionT i o m ()
-checkIn = 
-  interact Protocol.Keepalive >>= 
-  maybe (return ()) ($bug "Unexpected response")
+checkIn = do 
+  resetKeepalive
+  interact Protocol.Keepalive >>= maybe (return ()) ($bug "Unexpected response")
 
 closeSession ::
   (Serializable IO i, Serializable IO o, MonadIO m, Applicative m) => 
@@ -244,9 +243,9 @@ closeSession =
 request :: 
   (Serializable IO i, Serializable IO o, MonadIO m, Applicative m) => 
   i -> ConnectionT i o m o
-request a = 
-  interact (Protocol.UserRequest a) >>= 
-  maybe ($bug "Unexpected response") return
+request a = do
+  resetKeepalive
+  interact (Protocol.UserRequest a) >>= maybe ($bug "Unexpected response") return
 
 
 -- Failure
