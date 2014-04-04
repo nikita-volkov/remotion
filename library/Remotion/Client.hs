@@ -15,7 +15,7 @@ module Remotion.Client (
 where
 
 
-import Remotion.Util.Prelude hiding (State, listen, interact)
+import Remotion.Util.Prelude hiding (traceIO, traceIOWithTime, State, listen, interact)
 import qualified Remotion.Util.Prelude as Prelude
 import qualified Remotion.SessionT as S
 import qualified Remotion.Protocol as Protocol
@@ -24,6 +24,22 @@ import qualified Control.Concurrent.Async.Lifted as A
 import qualified Control.Concurrent.Lock as Lock
 import qualified Network
 import qualified Remotion.Util.FileSystem as FS
+
+
+-- Debugging.
+-------------------------
+-- The following functions get enabled during debugging.
+
+debugging = True
+prefix = ("Client: " <>)
+traceIO = if debugging 
+  then Prelude.traceIO . prefix 
+  else const $ return ()
+traceIOWithTime = if debugging 
+  then Prelude.traceIOWithTime . prefix 
+  else const $ return ()
+
+--------------------------------------------------------------------------------
 
 -- |
 -- A monad transformer for performing actions on client-side.
@@ -105,10 +121,9 @@ runConnectionT (userProtocolVersion, url) t =
       Left e -> case ioeGetErrorType e of
         NoSuchThing -> left $ UnreachableURL
         _ -> $bug $ "Unexpected IOException: " <> (packText . show) e
-    closeSocket socket = 
-      liftIO $ 
-      handle (const $ return () :: SomeException -> IO ()) $ 
-      hClose socket
+    closeSocket socket = do
+      traceIOWithTime $ "Closing socket " <> show socket
+      liftIO $ handle (const $ return () :: SomeException -> IO ()) $ hClose socket
     runHandshake socket =
       S.run session settings >>= 
       hoistEither . fmapL adaptSessionFailure >>= 
@@ -118,8 +133,9 @@ runConnectionT (userProtocolVersion, url) t =
         credentials = case url of
           Socket _ -> Nothing
           Host _ _ x -> x
-        settings = (socket, 10^6*1)
+        settings = (socket, 10^6*3)
     runInteraction socket timeout lock = do
+      traceIOWithTime $ "Interacting on socket " <> show socket
       keepaliveState <- liftIO $ newMVar =<< Just <$> getCurrentTime
       join $ fmap hoistEither $ lift $ runStack socket keepaliveState timeout lock $ do
         A.withAsync (finallyME (t <* closeSession) stopKeepalive) $ \ta ->
@@ -149,8 +165,10 @@ openURLSocketIO = \case
 
 stopKeepalive :: (MonadIO m) => ConnectionT i o m ()
 stopKeepalive = do
+  traceIOWithTime "Stopping keepalive"
   (state, _, _) <- ConnectionT $ ask
   liftIO $ modifyMVar_ state $ const $ return Nothing
+  traceIOWithTime "Stopped keepalive"
 
 keepaliveLoop :: 
   (Applicative m, MonadIO m, Serializable IO o, Serializable IO i) => 
@@ -186,10 +204,8 @@ resetKeepalive = do
 interact :: 
   (Serializable IO o, Serializable IO i, MonadIO m, Applicative m) =>
   Protocol.Request i -> ConnectionT i o m (Maybe o)
-interact = \request -> 
-  withLock $ do
-    send request
-    receive >>= either (throwError . adaptInteractionFailure) return
+interact = \request -> do
+  withLock $ send request >> receive >>= either (throwError . adaptInteractionFailure) return
   where
     withLock action = do
       (_, _, l) <- ConnectionT ask
@@ -198,8 +214,14 @@ interact = \request ->
       where
         lock = ConnectionT . liftIO . Lock.acquire
         unlock = ConnectionT . liftIO . Lock.release
-    send r = liftSessionT $ S.send r
-    receive = liftSessionT $ S.receive
+    send r = 
+      traceIOWithTime "Sending" *>
+      (liftSessionT $ S.send r) <*
+      traceIOWithTime "Sent"
+    receive = 
+      traceIOWithTime "Receiving" *>
+      liftSessionT S.receive <*
+      traceIOWithTime "Received"
 
 checkIn :: 
   (Serializable IO i, Serializable IO o, MonadIO m, Applicative m) => 
@@ -212,8 +234,10 @@ closeSession ::
   (Serializable IO i, Serializable IO o, MonadIO m, Applicative m) => 
   ConnectionT i o m ()
 closeSession =
+  traceIOWithTime "Closing session" >>
   interact Protocol.CloseSession >>=
-  maybe (return ()) ($bug "Unexpected response")
+  maybe (return ()) ($bug "Unexpected response") >>
+  traceIOWithTime "Closed session"
 
 -- |
 -- Send a request @i@ and receive a response @o@.
