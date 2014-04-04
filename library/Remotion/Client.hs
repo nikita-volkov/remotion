@@ -206,20 +206,19 @@ keepaliveLoop = do
       liftIO $ threadDelay $ 10^3 * 10
       keepaliveLoop
 
-reduceTimeout :: Double -> Double
-reduceTimeout = curve 1 2
+reduceTimeout :: Int -> Int
+reduceTimeout = floor . (*10^6) . curve 1.2 1.3 . (/(10^6)) . fromIntegral
   where
     curve bending startingStraightness x = x / exp (bending / (x + startingStraightness))
 
 resetKeepalive :: (MonadIO m) => ConnectionT i o m ()
 resetKeepalive = do
   (state, timeout, _) <- ConnectionT $ ask
-  let loweredTimeout = (floor . reduceTimeout . fromIntegral) timeout
   liftIO $ do
     time <- getCurrentTime
-    modifyMVar_ state $ const $ return $ Just $
-      microsToDiff loweredTimeout `addUTCTime` time
-
+    let nextTime = (microsToDiff $ toInteger $ reduceTimeout timeout) `addUTCTime` time
+    modifyMVar_ state $ const $ return $ Just $ nextTime
+      
 interact :: 
   (Serializable IO o, Serializable IO i, MonadIO m, Applicative m) =>
   P.Request i -> ConnectionT i o m (Maybe o)
