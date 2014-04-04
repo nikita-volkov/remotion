@@ -119,9 +119,10 @@ runServeT (userVersion, listeningMode, timeout, maxClients, log, processRequest)
     let 
       log' = log . (("Listener " <> packText (show i) <> ": ") <>)
       acquire = do
-        (connectionSocket, _, _) <- withMVar activeListenerLock $ const $ do
+        (connectionSocket, _, _) <- do
+          takeMVar activeListenerLock
           log' $ "Waiting for connection"
-          Network.accept listeningSocket
+          Network.accept listeningSocket <* putMVar activeListenerLock ()
         modifyMVar_ slotsVar $ return . pred
         return connectionSocket
       release connectionSocket = do  
