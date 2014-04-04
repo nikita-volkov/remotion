@@ -112,6 +112,8 @@ runServeT (userVersion, listeningMode, timeout, maxClients, log, processRequest)
 
   activeListenerLock <- liftIO $ newMVar ()
 
+  mainThreadID <- liftIO $ myThreadId
+
   liftIO $ log "Listening"
 
   -- Spawn all workers
@@ -136,7 +138,15 @@ runServeT (userVersion, listeningMode, timeout, maxClients, log, processRequest)
           either 
             (log' . ("Session failed: " <>) . packText . show) 
             (const $ log' "Session closed")
-      in As.async $ forever $ acquire >>= \s -> finally (process s) (release s)
+      in As.async $ forever $ do
+        s <- acquire
+        r <- try $ process s
+        release s
+        case r of
+          Right r -> return r
+          Left se -> if
+            | Just ThreadKilled <- fromException se -> throwIO ThreadKilled
+            | otherwise -> throwTo mainThreadID se
   let
     wait = do
       void $ As.waitAnyCancel listenerAsyncs
