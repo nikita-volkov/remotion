@@ -80,6 +80,7 @@ library
     -- data:
     hashtables == 1.1.*,
     time,
+    old-locale,
     containers,
     hashable,
     text,
@@ -168,6 +169,7 @@ test-suite remotion-htf-test-suite
     -- data:
     hashtables == 1.1.*,
     time,
+    old-locale,
     containers,
     hashable,
     text,

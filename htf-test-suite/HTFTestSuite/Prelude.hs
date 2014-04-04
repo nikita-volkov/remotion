@@ -8,6 +8,7 @@ module HTFTestSuite.Prelude
     (?:),
     traceM,
     traceIO,
+    traceIOWithTime,
     packText,
     unpackText,
     bug,
@@ -142,6 +143,8 @@ import qualified Data.Text.Lazy
 import qualified Data.Text
 import qualified Prelude
 import qualified Debug.Trace
+import qualified System.Locale
+import qualified Data.Time
 
 
 type LazyByteString = Data.ByteString.Lazy.ByteString
@@ -157,6 +160,16 @@ traceM s = trace s $ return ()
 
 traceIO :: (MonadIO m) => String -> m ()
 traceIO = liftIO . Debug.Trace.traceIO
+
+traceIOWithTime :: (MonadIO m) => String -> m ()
+traceIOWithTime s = do
+  time <- liftIO $ getCurrentTime
+  traceIO $ 
+    formatTime time <> ": " <> s
+  where
+    formatTime = 
+      take 15 . 
+      Data.Time.formatTime System.Locale.defaultTimeLocale "%X.%q"
 
 packText = Data.Text.pack
 unpackText = Data.Text.unpack
