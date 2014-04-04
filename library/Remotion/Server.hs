@@ -3,7 +3,7 @@ module Remotion.Server
     -- * Control
     -- ** Monad-transformer
     ServeT,
-    Failure,
+    Failure(..),
     runServeT,
     wait,
     countSlots,
