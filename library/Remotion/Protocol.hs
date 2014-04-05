@@ -17,7 +17,9 @@ type UserProtocolVersion = Int
 
 -- |
 -- Either a plain ASCII password or an encoding of some data, 
--- e.g. an MD5 hash of a login-password pair or just a password.
+-- e.g. an MD5 hash of a username-password pair or just a password.
+-- In more involved scenarios you can mix in serialization, 
+-- e.g. a serialized pair of username and a hash of just the password.
 -- 
 -- @Nothing@ means anonymous.
 type Credentials = Maybe ByteString

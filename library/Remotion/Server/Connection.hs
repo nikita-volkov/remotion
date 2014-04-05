@@ -32,8 +32,8 @@ data ConnectionFailure =
 -----------------------------
 
 -- | 
--- A function, which checks the hashed authentication data.
--- If you want to provide access to anybody, use @(\_ -> return True)@.
+-- A function, which checks the authentication data.
+-- If you want to provide access to anybody, use @(const $ return True)@.
 type Authenticate = P.Credentials -> IO Bool
 
 -- |

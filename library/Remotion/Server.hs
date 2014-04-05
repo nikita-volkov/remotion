@@ -61,8 +61,7 @@ type MaxClients = Int
 
 -- |
 -- A logging function.
--- If you want no logging, use @('Control.Monad.void' . return)@, 
--- which is a fancy way of alternatively saying @(\\_ -> return ())@.
+-- If you want no logging, use @(const $ return ())@.
 -- If you want to output to console use @Data.Text.IO.'Data.Text.IO.putStrLn'@.
 -- If you want to somehow reformat the output, you're welcome: 
 -- @(Data.Text.IO.'Data.Text.IO.putStrLn' . (\"Remotion.Server: \" `<>`))@.
@@ -165,7 +164,7 @@ run (userVersion, listeningMode, timeout, maxClients, log, processRequest) m = r
   liftIO stop
   return r
 
--- | Block until the server stops due to an error.
+-- | Block until the server stops (which should never happen).
 wait :: (MonadIO m) => Server m ()
 wait = Server $ ask >>= \(x, _) -> liftIO $ x
 

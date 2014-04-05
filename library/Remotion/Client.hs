@@ -6,9 +6,9 @@ module Remotion.Client (
   request,
   -- * Settings
   Settings(..),
+  P.UserProtocolVersion,
   URL(..),
   P.Credentials(..),
-  P.UserProtocolVersion,
   -- * Failure
   Failure(..),
 )

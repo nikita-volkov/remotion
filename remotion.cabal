@@ -8,10 +8,10 @@ description:
   An API abstracting over the typical tasks of client-server communication.
   It automates the authentication process, failure management and 
   the task of keeping the connections alive.
-  The user can implement protocols of any form based on it.
+  It allows the user to implement protocols of any form.
 
   Useful for writing all kinds of services. 
-  E.g., the <http://hackage.haskell.org/package/graph-db graph-db> 
+  E.g., a <http://hackage.haskell.org/package/graph-db graph-db> 
   networking interface is based on this library.
 category:
   Network, Service, Protocol
