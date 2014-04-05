@@ -14,7 +14,7 @@ description:
   E.g., the <http://hackage.haskell.org/package/graph-db graph-db> 
   networking interface is based on this library.
 category:
-  Network, Service
+  Network, Service, Protocol
 homepage:
   https://github.com/nikita-volkov/remotion 
 bug-reports:
