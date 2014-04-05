@@ -10,7 +10,7 @@ module Remotion.Server
     runAndWait,
     -- * Settings
     Settings,
-    P.UserProtocolVersion,
+    P.UserProtocolSignature,
     ListeningMode(..),
     Port,
     C.Authenticate,
@@ -37,7 +37,7 @@ import qualified Data.Set as Set
 
 -- | Settings of how to run the server.
 type Settings i o s = 
-  (P.UserProtocolVersion, ListeningMode, P.Timeout, MaxClients, Log, 
+  (P.UserProtocolSignature, ListeningMode, P.Timeout, MaxClients, Log, 
    C.ProcessUserRequest i o s)
 
 -- | Defines how to listen for connections.

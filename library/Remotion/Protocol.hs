@@ -11,9 +11,13 @@ import Remotion.Util.Prelude
 type ProtocolVersion = Int
 
 -- |
--- A user-supplied version of user's protocol
--- used for checking of server-client match.
-type UserProtocolVersion = Int
+-- A unique identification of user's protocol version used for checking
+-- of protocol versions mismatch between client and server.
+-- It can be simply a user-supplied version number or 
+-- a hash or a serialization of the representation of a type used for protocol,
+-- which can be generated using such library as 
+-- <http://hackage.haskell.org/package/type-structure type-structure>.
+type UserProtocolSignature = ByteString
 
 -- |
 -- Either a plain ASCII password or an encoding of some data, 
@@ -36,7 +40,7 @@ data HandshakeFailure =
   -- A mismatch of the internal protocol versions on client and server.
   -- First is the version on the client, second is the version on the server.
   ProtocolVersionMismatch ProtocolVersion ProtocolVersion |
-  UserProtocolVersionMismatch UserProtocolVersion UserProtocolVersion |
+  UserProtocolSignatureMismatch UserProtocolSignature UserProtocolSignature |
   Unauthenticated
   deriving (Show, Generic)
 

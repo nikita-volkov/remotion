@@ -11,7 +11,7 @@ runConnection ::
   ServerIsAvailable ->
   Authenticate ->
   P.Timeout ->
-  P.UserProtocolVersion ->
+  P.UserProtocolSignature ->
   ProcessUserRequest i o s -> 
   m (Either ConnectionFailure ())
 runConnection socket available authenticate timeout userVersion processRequest = runEitherT $ do
@@ -45,7 +45,7 @@ handshake ::
   ServerIsAvailable ->
   Authenticate ->
   P.Timeout ->
-  P.UserProtocolVersion ->
+  P.UserProtocolSignature ->
   S.Session m (Either P.HandshakeFailure ())
 handshake available authenticate timeout userVersion = runEitherT $ do
   do
@@ -55,7 +55,7 @@ handshake available authenticate timeout userVersion = runEitherT $ do
     check (cv /= P.version) $ P.ProtocolVersionMismatch cv P.version
   do
     cv <- receive
-    check (cv /= userVersion) $ P.UserProtocolVersionMismatch cv userVersion
+    check (cv /= userVersion) $ P.UserProtocolSignatureMismatch cv userVersion
   do
     credentials <- receive
     ok <- liftIO $ authenticate $ credentials

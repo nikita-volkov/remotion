@@ -6,7 +6,7 @@ module Remotion.Client (
   request,
   -- * Settings
   Settings(..),
-  P.UserProtocolVersion,
+  P.UserProtocolSignature,
   URL(..),
   P.Credentials(..),
   -- * Failure
@@ -61,7 +61,7 @@ type Lock = Lock.Lock
 
 -- |
 -- Settings of 'Client'.
-type Settings = (P.UserProtocolVersion, URL)
+type Settings = (P.UserProtocolSignature, URL)
 
 -- |
 -- Location of the server.
@@ -281,7 +281,7 @@ data Failure =
   -- | 
   -- A mismatch of the user-supplied versions of custom protocol on client and server.
   -- First is the version on the client, second is the version on the server.
-  UserProtocolVersionMismatch Int Int |
+  UserProtocolSignatureMismatch ByteString ByteString |
   -- |
   -- Incorrect credentials.
   Unauthenticated |
@@ -303,7 +303,7 @@ adaptHandshakeFailure :: P.HandshakeFailure -> Failure
 adaptHandshakeFailure = \case
   P.ServerIsBusy -> ServerIsBusy
   P.ProtocolVersionMismatch c s -> ProtocolVersionMismatch c s
-  P.UserProtocolVersionMismatch c s -> UserProtocolVersionMismatch c s
+  P.UserProtocolSignatureMismatch c s -> UserProtocolSignatureMismatch c s
   P.Unauthenticated -> Unauthenticated
 
 adaptInteractionFailure :: P.InteractionFailure -> Failure

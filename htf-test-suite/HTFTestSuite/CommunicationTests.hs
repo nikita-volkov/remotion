@@ -56,12 +56,12 @@ host = "127.0.0.1"
 credentials = Just "p1"
 dir = "./dist/test/"
 timeout = 500 * 10 ^ 3
-serverSettings = (1, hostLM, timeout, 100)
-clientSettings = (1, hostURL)
+serverSettings = ("1", hostLM, timeout, 100)
+clientSettings = ("1", hostURL)
 
 runServer :: 
   (MonadIO m) => 
-  (S.UserProtocolVersion, S.ListeningMode, S.Timeout, S.MaxClients) ->
+  (S.UserProtocolSignature, S.ListeningMode, S.Timeout, S.MaxClients) ->
   S.Server m a -> 
   m (Either S.Failure a)
 runServer (upv, lm, to, mc) t = do
@@ -90,8 +90,8 @@ test_socketConnection = do
         C.request $ Get
   traceIO "---"
   where
-    serverSettings = (1, socketLM, timeout, 100)
-    clientSettings = (1, socketURL)
+    serverSettings = ("1", socketLM, timeout, 100)
+    clientSettings = ("1", socketURL)
 
 test_hostConnection = do
   traceIO "--- \"hostConnection\" log ---"
@@ -111,44 +111,44 @@ test_hostConnection = do
         return r
   traceIO "---"
   where
-    serverSettings = (1, hostLM, timeout, 100)
-    clientSettings = (1, hostURL)
+    serverSettings = ("1", hostLM, timeout, 100)
+    clientSettings = ("1", hostURL)
 
 test_serverResourcesGetReleased = do
   assertEqual (Right ()) =<< do
     runServer serverSettings (return ())
     runServer serverSettings (return ())
   where
-    serverSettings = (1, socketLM, timeout, 100)
+    serverSettings = ("1", socketLM, timeout, 100)
 
 test_invalidCredentials = do
   assertEqual (Right $ Left $ C.Unauthenticated) =<< do
     runServer serverSettings $ runClient clientSettings $ return ()
   where
-    serverSettings = (1, hostLM, timeout, 100)
-    clientSettings = (1, C.Host host port (Just "1"))
+    serverSettings = ("1", hostLM, timeout, 100)
+    clientSettings = ("1", C.Host host port (Just "1"))
 
 test_noCredentials = do
   assertEqual (Right $ Left $ C.Unauthenticated) =<< do
     runServer serverSettings $ runClient clientSettings $ return ()
   where
-    serverSettings = (1, hostLM, timeout, 100)
-    clientSettings = (1, C.Host host port Nothing)
+    serverSettings = ("1", hostLM, timeout, 100)
+    clientSettings = ("1", C.Host host port Nothing)
 
 test_connectingToAnOfflineServer = do
   assertEqual (Left $ C.UnreachableURL) =<< do
     runServer serverSettings (return ())
     runClient clientSettings $ return ()
   where
-    serverSettings = (1, hostLM, timeout, 100)
-    clientSettings = (1, hostURL)
+    serverSettings = ("1", hostLM, timeout, 100)
+    clientSettings = ("1", hostURL)
 
-test_unmatchingUserProtocolVersions = do
-  assertEqual (Right $ Left $ C.UserProtocolVersionMismatch 2 1) =<< do
+test_unmatchingUserProtocolSignatures = do
+  assertEqual (Right $ Left $ C.UserProtocolSignatureMismatch "2" "1") =<< do
     runServer serverSettings $ runClient clientSettings $ return ()
   where
-    serverSettings = (1, hostLM, timeout, 100)
-    clientSettings = (2, hostURL)
+    serverSettings = ("1", hostLM, timeout, 100)
+    clientSettings = ("2", hostURL)
 
 test_requestAnOfflineServer = do
   traceIO "--- \"requestAnOfflineServer\" log ---"
@@ -167,8 +167,8 @@ test_requestAnOfflineServer = do
   where
     timeUnit = 10^5
     timeout = 3*timeUnit
-    serverSettings = (1, hostLM, timeout, 100)
-    clientSettings = (1, hostURL)
+    serverSettings = ("1", hostLM, timeout, 100)
+    clientSettings = ("1", hostURL)
 
 test_clientConnectAcquiresASlot = do
   runServer serverSettings $ do
@@ -196,8 +196,8 @@ test_keepalive = do
   where
     timeUnit = 10^5
     timeout = timeUnit * 1
-    serverSettings = (1, hostLM, timeout, 100)
-    clientSettings = (1, hostURL)
+    serverSettings = ("1", hostLM, timeout, 100)
+    clientSettings = ("1", hostURL)
 
 test_multipleClients = do
   runServer serverSettings $ do
@@ -219,8 +219,8 @@ test_highLoad = do
     liftIO $ assertEqual (Right $ Right $ 100 * 100) $ r
   return () :: IO ()
   where
-    serverSettings = (1, hostLM, timeout, 110)
-    clientSettings = (1, hostURL)
+    serverSettings = ("1", hostLM, timeout, 110)
+    clientSettings = ("1", hostURL)
 
 test_concurrentRequestsFromASingleClient = do
   assertEqual (Right $ Right $ Right $ 1000) =<< do
@@ -242,8 +242,8 @@ test_tooManyConnections = do
       mapM_ As.wait [a, b]
       return r
   where
-    serverSettings = (1, hostLM, timeout, 2)
-    clientSettings = (1, hostURL)
+    serverSettings = ("1", hostLM, timeout, 2)
+    clientSettings = ("1", hostURL)
 
 test_lastConnectionSlot = do
   assertEqual (Right $ Right $ ()) =<< do
@@ -252,8 +252,8 @@ test_lastConnectionSlot = do
       liftIO $ threadDelay $ 10^3*50
       (runClient clientSettings $ return ()) <* As.wait a
   where
-    serverSettings = (1, hostLM, timeout, 2)
-    clientSettings = (1, hostURL)
+    serverSettings = ("1", hostLM, timeout, 2)
+    clientSettings = ("1", hostURL)
 
 test_multipleHittersOnTooManyConnectionsStillGetSurved = do
   assertEqual (Right $ replicate 10 $ Left $ C.ServerIsBusy) =<< do
@@ -263,13 +263,13 @@ test_multipleHittersOnTooManyConnectionsStillGetSurved = do
           liftIO $ threadDelay $ 10^3*50
           As.mapConcurrently id $ replicate 10 $ runClient clientSettings $ return ()
   where
-    serverSettings = (1, hostLM, timeout, 2)
-    clientSettings = (1, hostURL)
+    serverSettings = ("1", hostLM, timeout, 2)
+    clientSettings = ("1", hostURL)
 
 test_invalidClientRequests = do
   state <- newMVar 0
   assertEqual (Right $ Left $ C.CorruptRequest "Out of range") =<< do
-    S.run (1, hostLM, timeout, 10, logToConsole, processRequest state) $ do
+    S.run ("1", hostLM, timeout, 10, logToConsole, processRequest state) $ do
       C.run clientSettings $ do
         C.request 'a' :: C.Client Char Int (S.Server IO) Int
 
