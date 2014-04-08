@@ -273,7 +273,17 @@ data Failure =
   UnreachableURL |
   -- |
   -- Server has too many connections already.
+  -- It's suggested to retry later.
   ServerIsBusy |
+  -- |
+  -- Incorrect credentials.
+  Unauthenticated |
+  -- |
+  -- Connection got interrupted for some reason.
+  ConnectionInterrupted |
+  -- |
+  -- A timeout of communication with server reached.
+  TimeoutReached Int |
   -- | 
   -- A mismatch of the internal protocol versions on client and server.
   -- First is the version on the client, second is the version on the server.
@@ -282,20 +292,9 @@ data Failure =
   -- A mismatch of the user-supplied versions of custom protocol on client and server.
   -- First is the version on the client, second is the version on the server.
   UserProtocolSignatureMismatch ByteString ByteString |
-  -- |
-  -- Incorrect credentials.
-  Unauthenticated |
-  -- |
-  -- Connection got interrupted for some reason.
-  ConnectionInterrupted |
-  -- |
-  -- Server has not responded in the required amount of time.
-  ResponseTimeoutReached Int |
-  -- |
-  -- The request could not get sent in the required amount of time.
-  RequestTimeoutReached Int |
-  -- |
-  -- Server reports corrupt request.
+  -- | 
+  -- Server reports that it was unable to deserialize the request.
+  -- This is only expected to happen in case of user's protocol mismatch.
   CorruptRequest Text
   deriving (Show, Read, Ord, Eq, Generic, Data, Typeable)
 
@@ -314,6 +313,6 @@ adaptInteractionFailure = \case
 adaptSessionFailure :: S.Failure -> Failure
 adaptSessionFailure = \case
   S.ConnectionInterrupted -> ConnectionInterrupted
-  S.SendTimeoutReached t -> RequestTimeoutReached t
-  S.ReceiveTimeoutReached t -> ResponseTimeoutReached t
+  S.SendTimeoutReached t -> TimeoutReached t
+  S.ReceiveTimeoutReached t -> TimeoutReached t
   S.CorruptData t -> $bug $ "Corrupt server response: " <> t
