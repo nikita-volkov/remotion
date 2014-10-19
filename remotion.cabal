@@ -11,8 +11,6 @@ description:
   It allows the user to implement protocols of any form.
 
   Useful for writing all kinds of services. 
-  E.g., a <http://hackage.haskell.org/package/graph-db graph-db> 
-  networking interface is based on this library.
 category:
   Network, Service, Protocol
 homepage:
