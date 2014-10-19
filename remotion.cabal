@@ -141,7 +141,7 @@ test-suite remotion-htf-test-suite
     QuickCheck-GenT >= 0.1.3 && < 0.2,
     QuickCheck,
     HUnit,
-    HTF == 0.11.*,
+    HTF == 0.12.*,
     -- streaming:
     pipes >= 4.0 && < 4.2,
     pipes-bytestring == 2.0.*,
